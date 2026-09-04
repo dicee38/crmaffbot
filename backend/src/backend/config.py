@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,6 +21,17 @@ class Settings(BaseSettings):
     idle_days_threshold: int = 3
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @field_validator("database_url")
+    @classmethod
+    def _use_asyncpg_driver(cls, value: str) -> str:
+        # Railway's managed Postgres (and most hosts) hand out a plain postgres(ql):// URL;
+        # SQLAlchemy's async engine needs the +asyncpg driver suffix to use it.
+        if value.startswith("postgres://"):
+            return "postgresql+asyncpg://" + value[len("postgres://") :]
+        if value.startswith("postgresql://"):
+            return "postgresql+asyncpg://" + value[len("postgresql://") :]
+        return value
 
 
 settings = Settings()
