@@ -27,8 +27,11 @@ async def my_stats(message: Message, current_user: dict) -> None:
 
     stats = response.json()
     rank_text = f"{stats['rank']} из {stats['team_size']}" if stats["rank"] else "нет команды"
-    await message.answer(
+    text = (
         f"Депозитов за месяц: {stats['deposit_count']}\n"
         f"Сумма: {stats['total_amount']}\n"
         f"Место в команде: {rank_text}"
     )
+    if stats["commission_rate"] is not None:
+        text += f"\nКомиссия ({stats['commission_rate']}%): {stats['commission_amount']}"
+    await message.answer(text)

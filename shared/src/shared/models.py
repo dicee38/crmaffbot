@@ -48,6 +48,8 @@ class User(Base):
     status: Mapped[UserStatus] = mapped_column(
         _pg_enum(UserStatus, "user_status"), default=UserStatus.ACTIVE
     )
+    # Percent, e.g. 5.00 = 5%. Null = no commission configured for this manager (§8 stage 4).
+    commission_rate: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

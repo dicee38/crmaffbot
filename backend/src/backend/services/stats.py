@@ -97,6 +97,10 @@ async def get_manager_stats(
 
     rank, team_size = await _rank_in_team(db, user, period_start, period_end)
 
+    commission_amount = None
+    if user.commission_rate is not None:
+        commission_amount = current_amount * user.commission_rate / 100
+
     return MyStatsOut(
         total_amount=current_amount,
         deposit_count=current_count,
@@ -104,4 +108,6 @@ async def get_manager_stats(
         team_size=team_size,
         previous_period_amount=previous_amount,
         change_percent=change_percent,
+        commission_rate=user.commission_rate,
+        commission_amount=commission_amount,
     )

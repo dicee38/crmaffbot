@@ -141,3 +141,42 @@ async def add_teamlead(message: Message, command: CommandObject, current_user: d
         await message.answer(f"{full_name} назначен(а) тимлидом команды «{team_name}».")
     else:
         await message.answer(f"Пользователь создан, но не удалось назначить тимлидом: {link_response.text}")
+
+
+@router.message(Command("set_commission"))
+async def set_commission(message: Message, command: CommandObject, current_user: dict) -> None:
+    if current_user["role"] != "admin":
+        await message.answer("Только для администратора.")
+        return
+
+    usage = "Использование: /set_commission <telegram_id> <ставка в %>"
+    parts = command.args.split() if command.args else []
+    if len(parts) != 2 or not parts[0].isdigit():
+        await message.answer(usage)
+        return
+
+    telegram_id = int(parts[0])
+    try:
+        rate = float(parts[1].replace(",", "."))
+    except ValueError:
+        await message.answer(usage)
+        return
+
+    async with httpx.AsyncClient(base_url=settings.backend_url) as client:
+        headers = auth_headers(current_user["telegram_id"])
+        list_response = await client.get("/users", headers=headers)
+        target = next((u for u in list_response.json() if u["telegram_id"] == telegram_id), None)
+        if target is None:
+            await message.answer("Пользователь не найден.")
+            return
+
+        response = await client.post(
+            f"/users/{target['id']}/commission-rate",
+            headers=headers,
+            json={"commission_rate": rate},
+        )
+
+    if response.status_code == 200:
+        await message.answer(f"Комиссия {target['full_name']}: {rate}%.")
+    else:
+        await message.answer(f"Ошибка: {response.text}")

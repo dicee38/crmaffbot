@@ -87,6 +87,8 @@ class MyStatsOut(BaseModel):
     team_size: int | None
     previous_period_amount: Decimal
     change_percent: float | None
+    commission_rate: Decimal | None
+    commission_amount: Decimal | None
 
 
 class UserOut(BaseModel):
@@ -96,6 +98,7 @@ class UserOut(BaseModel):
     role: Role
     team_id: uuid.UUID | None
     status: UserStatus
+    commission_rate: Decimal | None
 
     model_config = {"from_attributes": True}
 
@@ -105,6 +108,10 @@ class UserCreate(BaseModel):
     full_name: str
     role: Role
     team_id: uuid.UUID | None = None
+
+
+class CommissionRateUpdate(BaseModel):
+    commission_rate: Decimal = Field(ge=0, le=100)
 
 
 class TeamCreate(BaseModel):

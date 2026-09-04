@@ -8,7 +8,7 @@ from backend.deps import get_current_user, get_db
 from backend.permissions import require_role
 from shared.enums import Role, UserStatus
 from shared.models import Team, User
-from shared.schemas import TeamCreate, TeamOut, TeamUpdate, UserCreate, UserOut
+from shared.schemas import CommissionRateUpdate, TeamCreate, TeamOut, TeamUpdate, UserCreate, UserOut
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -79,6 +79,22 @@ async def unblock_user(
 ) -> User:
     user = await _get_user_in_org_or_404(db, admin, user_id)
     user.status = UserStatus.ACTIVE
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+@router.post("/{user_id}/commission-rate", response_model=UserOut)
+async def set_commission_rate(
+    user_id: uuid.UUID,
+    payload: CommissionRateUpdate,
+    admin: User = Depends(require_role(Role.ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    user = await _get_user_in_org_or_404(db, admin, user_id)
+    if user.role != Role.MANAGER:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Commission only applies to managers")
+    user.commission_rate = payload.commission_rate
     await db.commit()
     await db.refresh(user)
     return user
