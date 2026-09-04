@@ -69,7 +69,13 @@ bot/       — aiogram-бот, обращается к backend по REST
    - Build Command: тот же, что у backend.
    - Start Command: `uv run --package bot python -m bot.main`
    - Variables: `BOT_TOKEN` (тот же), `INTERNAL_API_SECRET` (тот же, что у backend), `BACKEND_URL` — приватный адрес backend-сервиса внутри Railway (`${{backend.RAILWAY_PRIVATE_DOMAIN}}`, порт 8080 по умолчанию у Railway для приватной сети — проверить фактический порт в Settings backend-сервиса), `MINIAPP_URL` — публичный домен backend + `/miniapp/` (например `https://<backend-domain>.up.railway.app/miniapp/`).
-5. После первого успешного деплоя backend проверить `https://<backend-domain>/health` → `{"status":"ok"}`, затем прогнать сид-скрипт через `railway run` или разово через Railway Shell:
+5. После первого успешного деплоя backend проверить `https://<backend-domain>/health` → `{"status":"ok"}`.
+6. **Важно про домен backend**: приложение слушает `$PORT`, который Railway фактически назначает (обычно не совпадает с портом, указанным при `railway domain --port ...`) — если после генерации домена бэкенд отвечает 502, посмотреть реальный порт в логах (`Uvicorn running on http://0.0.0.0:XXXX`) и поправить домен: `railway domain update <domain> --port XXXX --service backend`.
+7. **Сидирование продакшен-БД** (создание первой организации/админа): `railway run` резолвит переменные, но выполняет команду **локально** — приватный `DATABASE_URL` (`*.railway.internal`) с локальной машины недоступен. Рабочий способ:
    ```
-   railway run --service backend uv run --package backend python -m backend.seed "Моя компания" <telegram_id> "Имя"
+   railway tcp-proxy create --port 5432 --service Postgres --json   # даёт временный публичный host:port
+   DATABASE_URL="postgresql+asyncpg://postgres:<пароль>@<proxy-host>:<proxy-port>/railway" \
+     uv run --package backend python -m backend.seed "Моя компания" <telegram_id> "Имя"
+   railway tcp-proxy delete <proxy-id> --service Postgres --yes     # закрыть прокси сразу после
    ```
+8. **После смены токена бота/если бот "не отвечает" на новом деплое**: убедиться, что нет второго запущенного процесса бота с тем же `BOT_TOKEN` (например, локального) — Telegram разрешает только одного получателя `getUpdates`, конфликт делает бот полностью немым без явной ошибки для пользователя.

@@ -12,3 +12,4 @@ __pycache__/
 uv.lock.bak
 dist/
 build/
+node_modules/
