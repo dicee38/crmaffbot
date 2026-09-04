@@ -13,3 +13,4 @@ uv.lock.bak
 dist/
 build/
 node_modules/
+backup_*.sql
