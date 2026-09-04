@@ -84,6 +84,15 @@ async def unblock_user(
     return user
 
 
+@router.get("/teams", response_model=list[TeamOut])
+async def list_teams(
+    user: User = Depends(require_role(Role.ADMIN, Role.OWNER)),
+    db: AsyncSession = Depends(get_db),
+) -> list[Team]:
+    result = await db.execute(select(Team).where(Team.org_id == user.org_id))
+    return list(result.scalars().all())
+
+
 @router.post("/teams", response_model=TeamOut, status_code=status.HTTP_201_CREATED)
 async def create_team(
     payload: TeamCreate,

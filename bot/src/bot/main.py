@@ -26,7 +26,7 @@ async def main() -> None:
     bot = Bot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher()
 
-    dp.message.middleware(AuthMiddleware())
+    dp.update.middleware(AuthMiddleware())
     dp.message.register(cmd_start, CommandStart())
     dp.include_router(deposit_entry.router)
     dp.include_router(my_stats.router)
