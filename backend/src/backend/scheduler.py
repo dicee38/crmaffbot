@@ -6,8 +6,8 @@ from backend.config import settings
 from backend.deps import SessionFactory
 from backend.services.notifications import send_telegram_message
 from backend.services.stats import get_top
-from shared.enums import Role
-from shared.models import Deposit, Organization, Team, User
+from shared.enums import DEPOSIT_ACTION_TYPES, Role
+from shared.models import MopAction, Organization, Team, User
 
 
 def _format_top(entries: list) -> str:
@@ -70,8 +70,10 @@ async def check_idle_managers() -> None:
 
             last_deposit_at = (
                 await db.execute(
-                    select(func.max(Deposit.created_at)).where(
-                        Deposit.manager_id == manager.id, Deposit.deleted_at.is_(None)
+                    select(func.max(MopAction.created_at)).where(
+                        MopAction.mop_id == manager.id,
+                        MopAction.action_type.in_(DEPOSIT_ACTION_TYPES),
+                        MopAction.deleted_at.is_(None),
                     )
                 )
             ).scalar_one_or_none()

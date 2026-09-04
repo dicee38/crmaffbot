@@ -5,9 +5,19 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared.enums import DepositStatus, Role
-from shared.models import Deposit, User
+from shared.enums import DEPOSIT_ACTION_TYPES, ActionStatus, Role
+from shared.models import MopAction, User
 from shared.schemas import MyStatsOut, TopEntry
+
+
+def _deposit_conditions(period_start: date, period_end: date):
+    return (
+        MopAction.action_type.in_(DEPOSIT_ACTION_TYPES),
+        MopAction.status == ActionStatus.CONFIRMED,
+        MopAction.deleted_at.is_(None),
+        MopAction.created_at >= period_start,
+        MopAction.created_at < period_end + timedelta(days=1),
+    )
 
 
 async def get_top(
@@ -18,20 +28,17 @@ async def get_top(
     period_end: date,
     order_by: str,
 ) -> list[TopEntry]:
-    total_amount_expr = func.coalesce(func.sum(Deposit.amount), 0).label("total_amount")
-    deposit_count_expr = func.count(Deposit.id).label("deposit_count")
+    total_amount_expr = func.coalesce(func.sum(MopAction.amount), 0).label("total_amount")
+    deposit_count_expr = func.count(MopAction.id).label("deposit_count")
+
+    join_condition = MopAction.mop_id == User.id
+    for condition in _deposit_conditions(period_start, period_end):
+        join_condition = join_condition & condition
 
     query = (
         select(User.id, User.full_name, total_amount_expr, deposit_count_expr)
         .select_from(User)
-        .outerjoin(
-            Deposit,
-            (Deposit.manager_id == User.id)
-            & (Deposit.status == DepositStatus.CONFIRMED)
-            & Deposit.deleted_at.is_(None)
-            & (Deposit.created_at >= period_start)
-            & (Deposit.created_at < period_end + timedelta(days=1)),
-        )
+        .outerjoin(MopAction, join_condition)
         .where(User.org_id == org_id, User.role == Role.MANAGER)
         .group_by(User.id, User.full_name)
     )
@@ -55,15 +62,11 @@ async def get_top(
 
 
 async def _sum_and_count(
-    db: AsyncSession, manager_id: uuid.UUID, start: date, end: date
+    db: AsyncSession, mop_id: uuid.UUID, start: date, end: date
 ) -> tuple[Decimal, int]:
     result = await db.execute(
-        select(func.coalesce(func.sum(Deposit.amount), 0), func.count(Deposit.id)).where(
-            Deposit.manager_id == manager_id,
-            Deposit.status == DepositStatus.CONFIRMED,
-            Deposit.deleted_at.is_(None),
-            Deposit.created_at >= start,
-            Deposit.created_at < end + timedelta(days=1),
+        select(func.coalesce(func.sum(MopAction.amount), 0), func.count(MopAction.id)).where(
+            MopAction.mop_id == mop_id, *_deposit_conditions(start, end)
         )
     )
     total, count = result.one()

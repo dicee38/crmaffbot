@@ -7,7 +7,7 @@ from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from backend.api import audit, change_requests, deposits, goals, reports, stats, users, webhooks
+from backend.api import actions, audit, change_requests, goals, platforms, reports, stats, users, webhooks
 from backend.config import settings
 from backend.scheduler import check_idle_managers, send_daily_digest, send_weekly_digest
 
@@ -37,7 +37,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="Sales CRM Bot Backend", lifespan=lifespan)
 
-app.include_router(deposits.router)
+app.include_router(actions.router)
 app.include_router(stats.router)
 app.include_router(users.router)
 app.include_router(webhooks.router)
@@ -45,6 +45,7 @@ app.include_router(goals.router)
 app.include_router(reports.router)
 app.include_router(change_requests.router)
 app.include_router(audit.router)
+app.include_router(platforms.router)
 
 app.mount(
     "/miniapp",

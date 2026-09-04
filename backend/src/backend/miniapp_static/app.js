@@ -4,19 +4,31 @@ tg?.expand();
 
 const initData = tg?.initData || "";
 
-const ROLE_LABELS = { manager: "Менеджер", teamlead: "Тимлид", admin: "Админ", owner: "Владелец" };
+const ROLE_LABELS = {
+  manager: "Менеджер",
+  teamlead: "Тимлид",
+  admin: "Админ",
+  owner: "Владелец",
+  analytic: "Аналитик",
+};
 const STATUS_LABELS = { active: "Активен", blocked: "Заблокирован" };
 const REQUEST_STATUS_LABELS = { pending: "Ожидает", approved: "Подтверждено", rejected: "Отклонено" };
 const ACTION_LABELS = { create: "Создание", update: "Правка", delete: "Удаление" };
+const ACTION_TYPE_LABELS = {
+  registration: "Регистрация",
+  first_deposit: "Первый депозит",
+  repeat_deposit: "Повторный депозит",
+  lead: "Лиды",
+};
 
 const TABS = {
   manager: [
     { id: "stats", label: "Статистика", icon: "📊" },
-    { id: "deposits", label: "Депозиты", icon: "💰" },
+    { id: "actions", label: "Действия", icon: "🧾" },
   ],
   teamlead: [
     { id: "team", label: "Команда", icon: "👥" },
-    { id: "deposits", label: "Депозиты", icon: "💰" },
+    { id: "actions", label: "Действия", icon: "🧾" },
     { id: "requests", label: "Заявки", icon: "✅" },
     { id: "more", label: "Ещё", icon: "⋯" },
   ],
@@ -28,6 +40,7 @@ const TABS = {
     { id: "more", label: "Ещё", icon: "⋯" },
   ],
   owner: [{ id: "company", label: "Компания", icon: "🏢" }],
+  analytic: [{ id: "company", label: "Компания", icon: "🏢" }],
 };
 
 const state = {
@@ -217,42 +230,52 @@ function showSetGoalSheet(scope, scopeId, onDone) {
   };
 }
 
-// ------------------------------------------------------------- deposits --
+// --------------------------------------------------------------- actions --
 
-function depositRow(dep, { canManage }) {
-  const managerLabel = dep.manager_id === state.me.id ? "" : `<div class="subtitle">${esc(userName(dep.manager_id))}</div>`;
+function actionRow(action, { canManage }) {
+  const ownerLabel =
+    action.mop_id === state.me.id ? "" : `<div class="subtitle">${esc(userName(action.mop_id))}</div>`;
   const actions = canManage
     ? `<div class="actions">
-        <button class="icon-btn" data-edit="${dep.id}" title="Изменить">✏️</button>
-        <button class="icon-btn danger" data-del="${dep.id}" title="Удалить">🗑</button>
+        <button class="icon-btn" data-edit="${action.id}" title="Изменить">✏️</button>
+        <button class="icon-btn danger" data-del="${action.id}" title="Удалить">🗑</button>
       </div>`
     : "";
+  const trailing =
+    action.amount !== null
+      ? `<div class="amount">${money(action.amount)} ${esc(action.currency)}</div>`
+      : action.action_type === "lead"
+        ? `<div class="amount">${action.lead_count}</div>`
+        : "";
   return `<div class="list-item">
-    <div class="main"><div class="title">${esc(dep.client_ref)}</div>${managerLabel}<div class="subtitle">${new Date(dep.created_at).toLocaleDateString("ru-RU")}</div></div>
-    <div class="trailing"><div class="amount">${money(dep.amount)} ${esc(dep.currency)}</div></div>
+    <div class="main">
+      <div class="title">${ACTION_TYPE_LABELS[action.action_type]}${action.player_id ? " — " + esc(action.player_id) : ""}</div>
+      ${ownerLabel}
+      <div class="subtitle">${new Date(action.created_at).toLocaleDateString("ru-RU")}</div>
+    </div>
+    <div class="trailing">${trailing}</div>
     ${actions}
   </div>`;
 }
 
-async function loadDeposits() {
-  const view = document.getElementById("view-deposits");
+async function loadActions() {
+  const view = document.getElementById("view-actions");
   view.innerHTML = skeleton(4);
   try {
     const { period_start, period_end } = periodThisMonth();
-    const deposits = await api("GET", "/deposits", { params: { period_start, period_end, limit: 50 } });
+    const actionsList = await api("GET", "/actions", { params: { period_start, period_end, limit: 50 } });
     if (state.me.role !== "manager") await ensureUsers();
-    const canManage = true;
-    view.innerHTML = deposits.length
-      ? `<div class="list">${deposits.map((d) => depositRow(d, { canManage })).join("")}</div>`
-      : stateBlock("empty", "За этот месяц депозитов нет.");
+    view.innerHTML = actionsList.length
+      ? `<div class="list">${actionsList.map((a) => actionRow(a, { canManage: true })).join("")}</div>`
+      : stateBlock("empty", "За этот месяц действий нет.");
 
     view.querySelectorAll("[data-del]").forEach((btn) => {
-      btn.onclick = () => confirmDeleteDeposit(btn.dataset.del);
+      btn.onclick = () => confirmDeleteAction(btn.dataset.del);
     });
     view.querySelectorAll("[data-edit]").forEach((btn) => {
       btn.onclick = () => {
-        const dep = deposits.find((d) => d.id === btn.dataset.edit);
-        showEditDepositSheet(dep);
+        const action = actionsList.find((a) => a.id === btn.dataset.edit);
+        showEditActionSheet(action);
       };
     });
   } catch (e) {
@@ -260,14 +283,14 @@ async function loadDeposits() {
   }
 }
 
-function confirmDeleteDeposit(depositId) {
-  openSheet("Удалить депозит?", `
-    <p class="muted">Депозит не удалится сразу — запрос уйдёт на согласование тимлиду/админу.</p>
+function confirmDeleteAction(actionId) {
+  openSheet("Удалить действие?", `
+    <p class="muted">Действие не удалится сразу — запрос уйдёт на согласование тимлиду/админу.</p>
     <button class="btn btn-danger btn-block" id="confirm-del">Запросить удаление</button>
   `);
   document.getElementById("confirm-del").onclick = async () => {
     try {
-      await api("POST", `/deposits/${depositId}/change-requests`, { json: { action: "delete" } });
+      await api("POST", `/actions/${actionId}/change-requests`, { json: { action: "delete" } });
       closeSheet();
       toast("Запрос на удаление отправлен");
     } catch (e) {
@@ -276,19 +299,28 @@ function confirmDeleteDeposit(depositId) {
   };
 }
 
-function showEditDepositSheet(dep) {
+function showEditActionSheet(action) {
+  const amountField =
+    action.amount !== null
+      ? `<div class="field"><label>Сумма</label><input id="edit-amount" type="number" inputmode="decimal" value="${action.amount}" /></div>`
+      : "";
   openSheet("Запросить правку", `
-    <div class="field"><label>Клиент</label><input id="edit-client" value="${esc(dep.client_ref)}" /></div>
-    <div class="field"><label>Сумма</label><input id="edit-amount" type="number" inputmode="decimal" value="${dep.amount}" /></div>
+    <div class="field"><label>ID игрока</label><input id="edit-player" value="${esc(action.player_id || "")}" /></div>
+    ${amountField}
     <button class="btn btn-primary" id="edit-submit">Отправить на согласование</button>
   `);
   document.getElementById("edit-submit").onclick = async () => {
-    const client_ref = document.getElementById("edit-client").value.trim();
-    const amount = document.getElementById("edit-amount").value;
-    if (!client_ref || !amount || Number(amount) <= 0) return toast("Заполните поля");
+    const player_id = document.getElementById("edit-player").value.trim();
+    const payload = { player_id };
+    const amountInput = document.getElementById("edit-amount");
+    if (amountInput) {
+      const amount = amountInput.value;
+      if (!amount || Number(amount) <= 0) return toast("Введите сумму");
+      payload.amount = amount;
+    }
     try {
-      await api("POST", `/deposits/${dep.id}/change-requests`, {
-        json: { action: "update", payload: { client_ref, amount } },
+      await api("POST", `/actions/${action.id}/change-requests`, {
+        json: { action: "update", payload },
       });
       closeSheet();
       toast("Запрос на правку отправлен");
@@ -298,38 +330,68 @@ function showEditDepositSheet(dep) {
   };
 }
 
-function showAddDepositSheet() {
+function showAddActionSheet() {
   const isManager = state.me.role === "manager";
-  openSheet("Внести депозит", `
-    ${!isManager ? `<div class="field"><label>Менеджер</label><select id="dep-manager"></select></div>` : ""}
-    <div class="field"><label>Клиент</label><input id="dep-client" placeholder="Имя или ID клиента" /></div>
-    <div class="field"><label>Сумма</label><input id="dep-amount" type="number" inputmode="decimal" placeholder="0.00" /></div>
-    <button class="btn btn-primary" id="dep-submit">Сохранить</button>
+  openSheet("Внести действие", `
+    <div class="field"><label>Тип действия</label>
+      <select id="act-type">${Object.entries(ACTION_TYPE_LABELS)
+        .map(([value, label]) => `<option value="${value}">${label}</option>`)
+        .join("")}</select>
+    </div>
+    ${!isManager ? `<div class="field"><label>Менеджер</label><select id="act-mop"></select></div>` : ""}
+    <div class="field" id="act-player-field"><label>ID игрока</label><input id="act-player" placeholder="Необязательно" /></div>
+    <div class="field" id="act-amount-field"><label>Сумма</label><input id="act-amount" type="number" inputmode="decimal" placeholder="0.00" /></div>
+    <div class="field" id="act-leadcount-field" hidden><label>Количество лидов</label><input id="act-leadcount" type="number" value="1" /></div>
+    <button class="btn btn-primary" id="act-submit">Сохранить</button>
   `);
+
+  const typeSelect = document.getElementById("act-type");
+  const amountField = document.getElementById("act-amount-field");
+  const leadCountField = document.getElementById("act-leadcount-field");
+  const syncFields = () => {
+    const isDeposit = typeSelect.value === "first_deposit" || typeSelect.value === "repeat_deposit";
+    amountField.hidden = !isDeposit;
+    leadCountField.hidden = typeSelect.value !== "lead";
+  };
+  typeSelect.onchange = syncFields;
+  syncFields();
+
   if (!isManager) {
     ensureUsers().then((users) => {
-      const managers = users.filter((u) => u.role === "manager" && (state.me.role === "admin" || u.team_id === state.me.team_id));
-      document.getElementById("dep-manager").innerHTML = managers
-        .map((u) => `<option value="${u.id}">${esc(u.full_name)}</option>`)
-        .join("") || `<option value="">Нет менеджеров</option>`;
+      const managers = users.filter(
+        (u) => u.role === "manager" && (state.me.role === "admin" || u.team_id === state.me.team_id)
+      );
+      document.getElementById("act-mop").innerHTML =
+        managers.map((u) => `<option value="${u.id}">${esc(u.full_name)}</option>`).join("") ||
+        `<option value="">Нет менеджеров</option>`;
     });
   }
-  document.getElementById("dep-submit").onclick = async () => {
-    const client_ref = document.getElementById("dep-client").value.trim();
-    const amount = document.getElementById("dep-amount").value;
-    if (!client_ref || !amount || Number(amount) <= 0) return toast("Заполните поля");
-    const json = { client_ref, amount, currency: "USD" };
-    if (!isManager) {
-      const managerId = document.getElementById("dep-manager").value;
-      if (!managerId) return toast("Выберите менеджера");
-      json.manager_id = managerId;
+
+  document.getElementById("act-submit").onclick = async () => {
+    const action_type = typeSelect.value;
+    const player_id = document.getElementById("act-player").value.trim() || null;
+    const json = { action_type, player_id, currency: "USD" };
+
+    if (action_type === "first_deposit" || action_type === "repeat_deposit") {
+      const amount = document.getElementById("act-amount").value;
+      if (!amount || Number(amount) <= 0) return toast("Введите сумму");
+      json.amount = amount;
     }
+    if (action_type === "lead") {
+      json.lead_count = Number(document.getElementById("act-leadcount").value) || 1;
+    }
+    if (!isManager) {
+      const mopId = document.getElementById("act-mop").value;
+      if (!mopId) return toast("Выберите менеджера");
+      json.mop_id = mopId;
+    }
+
     try {
-      await api("POST", "/deposits", { json });
+      await api("POST", "/actions", { json });
       closeSheet();
-      toast("Депозит сохранён");
-      state.loaded.delete("deposits");
-      if (state.activeTab === "deposits") loadDeposits();
+      toast("Действие сохранено");
+      state.loaded.delete("actions");
+      if (state.activeTab === "actions") loadActions();
     } catch (e) {
       toast(e.message);
     }
@@ -572,6 +634,7 @@ function showAddUserSheet() {
         <option value="manager">Менеджер</option>
         <option value="teamlead">Тимлид</option>
         <option value="admin">Админ</option>
+        <option value="analytic">Аналитик</option>
       </select>
     </div>
     <div class="field"><label>Команда</label>
@@ -603,7 +666,7 @@ function showManageUserSheet(user) {
   openSheet(user.full_name, `
     <div class="field"><label>Роль (Telegram ID ${user.telegram_id})</label>
       <select id="mu-role">
-        ${["manager", "teamlead", "admin"].map((r) => `<option value="${r}" ${r === user.role ? "selected" : ""}>${ROLE_LABELS[r]}</option>`).join("")}
+        ${["manager", "teamlead", "admin", "analytic"].map((r) => `<option value="${r}" ${r === user.role ? "selected" : ""}>${ROLE_LABELS[r]}</option>`).join("")}
       </select>
     </div>
     <div class="field"><label>Команда</label>
@@ -658,20 +721,22 @@ async function loadRequests() {
       view.innerHTML = stateBlock("empty", "Нет заявок, ожидающих согласования.");
       return;
     }
-    const deposits = await Promise.all(
-      requests.map((r) => api("GET", `/deposits/${r.deposit_id}`).catch(() => null))
+    const relatedActions = await Promise.all(
+      requests.map((r) => api("GET", `/actions/${r.action_id}`).catch(() => null))
     );
     await ensureUsers();
 
     view.innerHTML = `<div class="list">${requests
       .map((r, i) => {
-        const dep = deposits[i];
-        const depositLine = dep ? `${esc(dep.client_ref)} — ${money(dep.amount)} ${esc(dep.currency)}` : "депозит не найден";
+        const relatedAction = relatedActions[i];
+        const actionLine = relatedAction
+          ? `${ACTION_TYPE_LABELS[relatedAction.action_type]}${relatedAction.player_id ? " — " + esc(relatedAction.player_id) : ""}${relatedAction.amount !== null ? ` (${money(relatedAction.amount)} ${esc(relatedAction.currency)})` : ""}`
+          : "действие не найдено";
         const requester = userName(r.requested_by);
         const changes = r.action === "update" && r.payload ? `<div class="subtitle">Новое: ${esc(JSON.stringify(r.payload))}</div>` : "";
         return `<div class="list-item">
           <div class="main">
-            <div class="title">${ACTION_LABELS[r.action]}: ${depositLine}</div>
+            <div class="title">${ACTION_LABELS[r.action]}: ${actionLine}</div>
             <div class="subtitle">от ${esc(requester)}</div>
             ${changes}
           </div>
@@ -725,7 +790,7 @@ async function loadMore() {
     }
     try {
       toast("Формируем отчёт…");
-      await downloadReport(params, `deposits_${params.scope}_${period.period_start}_${period.period_end}.xlsx`);
+      await downloadReport(params, `actions_${params.scope}_${period.period_start}_${period.period_end}.xlsx`);
     } catch (e) {
       toast(e.message);
     }
@@ -748,9 +813,9 @@ async function loadMore() {
                 const changed = Object.keys(after).filter((k) => String(before[k]) !== String(after[k]));
                 changeText = changed.map((k) => `${k}: ${before[k]} → ${after[k]}`).join(", ");
               } else if (entry.action === "create") {
-                changeText = `${after.client_ref ?? ""} — ${after.amount ?? ""}`;
+                changeText = `${after.player_id ?? ""} — ${after.amount ?? ""}`;
               } else if (entry.action === "delete") {
-                changeText = `${before.client_ref ?? ""} — ${before.amount ?? ""}`;
+                changeText = `${before.player_id ?? ""} — ${before.amount ?? ""}`;
               }
               return `<div class="list-item">
                 <div class="main">
@@ -772,7 +837,7 @@ async function loadMore() {
 
 const LOADERS = {
   stats: loadStats,
-  deposits: loadDeposits,
+  actions: loadActions,
   team: loadTeam,
   company: loadCompany,
   teams: loadTeams,
@@ -787,8 +852,8 @@ function switchTab(id) {
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === id));
 
   const fab = document.getElementById("fab");
-  fab.hidden = !(id === "deposits");
-  fab.onclick = () => showAddDepositSheet();
+  fab.hidden = !(id === "actions");
+  fab.onclick = () => showAddActionSheet();
 
   if (!state.loaded.has(id)) {
     state.loaded.add(id);

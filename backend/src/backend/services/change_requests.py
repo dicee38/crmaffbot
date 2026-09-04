@@ -5,21 +5,21 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.services import deposits as deposit_service
+from backend.services import actions as action_service
 from shared.enums import AuditAction, ChangeRequestStatus
-from shared.models import Deposit, DepositChangeRequest
+from shared.models import ActionChangeRequest, MopAction
 
 
 async def create_request(
     db: AsyncSession,
     *,
-    deposit_id: uuid.UUID,
+    action_id: uuid.UUID,
     requested_by: uuid.UUID,
     action: AuditAction,
     payload: dict[str, Any] | None,
-) -> DepositChangeRequest:
-    request = DepositChangeRequest(
-        deposit_id=deposit_id,
+) -> ActionChangeRequest:
+    request = ActionChangeRequest(
+        action_id=action_id,
         requested_by=requested_by,
         action=action,
         payload=payload,
@@ -33,18 +33,20 @@ async def create_request(
 
 async def approve_request(
     db: AsyncSession,
-    request: DepositChangeRequest,
-    deposit: Deposit,
+    request: ActionChangeRequest,
+    mop_action: MopAction,
     *,
     reviewed_by: uuid.UUID,
-) -> DepositChangeRequest:
+) -> ActionChangeRequest:
     if request.action == AuditAction.UPDATE:
         fields: dict[str, Any] = dict(request.payload or {})
-        if "amount" in fields:
+        if "amount" in fields and fields["amount"] is not None:
             fields["amount"] = Decimal(fields["amount"])
-        await deposit_service.update_deposit(db, deposit, changed_by=reviewed_by, **fields)
+        if "channel_id" in fields and fields["channel_id"] is not None:
+            fields["channel_id"] = uuid.UUID(fields["channel_id"])
+        await action_service.update_action(db, mop_action, changed_by=reviewed_by, **fields)
     else:
-        await deposit_service.delete_deposit(db, deposit, changed_by=reviewed_by)
+        await action_service.delete_action(db, mop_action, changed_by=reviewed_by)
 
     request.status = ChangeRequestStatus.APPROVED
     request.reviewed_by = reviewed_by
@@ -55,8 +57,8 @@ async def approve_request(
 
 
 async def reject_request(
-    db: AsyncSession, request: DepositChangeRequest, *, reviewed_by: uuid.UUID
-) -> DepositChangeRequest:
+    db: AsyncSession, request: ActionChangeRequest, *, reviewed_by: uuid.UUID
+) -> ActionChangeRequest:
     request.status = ChangeRequestStatus.REJECTED
     request.reviewed_by = reviewed_by
     request.reviewed_at = datetime.now(UTC)

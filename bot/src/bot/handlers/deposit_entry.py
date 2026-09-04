@@ -35,7 +35,7 @@ async def deposit_amount(message: Message, state: FSMContext) -> None:
 
     await state.update_data(amount=amount)
     await state.set_state(DepositForm.client_ref)
-    await message.answer("Клиент (имя или ID)?")
+    await message.answer("ID игрока (или имя клиента)?")
 
 
 @router.message(StateFilter(DepositForm.client_ref))
@@ -43,9 +43,14 @@ async def deposit_client(message: Message, state: FSMContext, current_user: dict
     data = await state.get_data()
     async with httpx.AsyncClient(base_url=settings.backend_url) as client:
         response = await client.post(
-            "/deposits",
+            "/actions",
             headers=auth_headers(current_user["telegram_id"]),
-            json={"client_ref": message.text, "amount": data["amount"], "currency": "USD"},
+            json={
+                "action_type": "first_deposit",
+                "player_id": message.text,
+                "amount": data["amount"],
+                "currency": "USD",
+            },
         )
     await state.clear()
 

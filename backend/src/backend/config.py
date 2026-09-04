@@ -6,7 +6,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://crm:crm@localhost:5432/crm"
-    affiliate_webhook_secret: str = "dev-secret"
     dedup_window_minutes: int = 15
     # Same bot token as bot/.env — backend pushes Telegram notifications directly,
     # independent of the aiogram long-polling process (ТЗ §4.4).

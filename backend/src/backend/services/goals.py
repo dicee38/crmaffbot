@@ -6,8 +6,8 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared.enums import DepositStatus, GoalScope
-from shared.models import Deposit, Goal, User
+from shared.enums import DEPOSIT_ACTION_TYPES, ActionStatus, GoalScope
+from shared.models import Goal, MopAction, User
 
 
 def month_bounds(period: date) -> tuple[date, date]:
@@ -61,18 +61,19 @@ async def _current_amount(
     db: AsyncSession, org_id: uuid.UUID, scope: GoalScope, scope_id: uuid.UUID, start: date, end: date
 ) -> Decimal:
     conditions = [
-        Deposit.org_id == org_id,
-        Deposit.status == DepositStatus.CONFIRMED,
-        Deposit.deleted_at.is_(None),
-        Deposit.created_at >= start,
-        Deposit.created_at < end + timedelta(days=1),
+        MopAction.org_id == org_id,
+        MopAction.action_type.in_(DEPOSIT_ACTION_TYPES),
+        MopAction.status == ActionStatus.CONFIRMED,
+        MopAction.deleted_at.is_(None),
+        MopAction.created_at >= start,
+        MopAction.created_at < end + timedelta(days=1),
     ]
     if scope == GoalScope.USER:
-        conditions.append(Deposit.manager_id == scope_id)
+        conditions.append(MopAction.mop_id == scope_id)
     else:
-        conditions.append(Deposit.manager_id.in_(select(User.id).where(User.team_id == scope_id)))
+        conditions.append(MopAction.mop_id.in_(select(User.id).where(User.team_id == scope_id)))
 
-    result = await db.execute(select(func.coalesce(func.sum(Deposit.amount), 0)).where(*conditions))
+    result = await db.execute(select(func.coalesce(func.sum(MopAction.amount), 0)).where(*conditions))
     return Decimal(result.scalar_one())
 
 

@@ -30,7 +30,7 @@ async def top_team(
     period_end: date = Query(...),
     order_by: str = Query("amount", pattern="^(amount|count)$"),
     team_id: uuid.UUID | None = Query(None),
-    user: User = Depends(require_role(Role.TEAMLEAD, Role.ADMIN, Role.OWNER)),
+    user: User = Depends(require_role(Role.TEAMLEAD, Role.ADMIN, Role.OWNER, Role.ANALYTIC)),
     db: AsyncSession = Depends(get_db),
 ) -> list[TopEntry]:
     if user.role == Role.TEAMLEAD:
@@ -48,7 +48,7 @@ async def top_company(
     period_start: date = Query(...),
     period_end: date = Query(...),
     order_by: str = Query("amount", pattern="^(amount|count)$"),
-    user: User = Depends(require_role(Role.ADMIN, Role.OWNER)),
+    user: User = Depends(require_role(Role.ADMIN, Role.OWNER, Role.ANALYTIC)),
     db: AsyncSession = Depends(get_db),
 ) -> list[TopEntry]:
     return await stats_service.get_top(db, user.org_id, None, period_start, period_end, order_by)

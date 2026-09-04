@@ -17,25 +17,29 @@ async def my_deposits(message: Message, current_user: dict) -> None:
 
     async with httpx.AsyncClient(base_url=settings.backend_url) as client:
         response = await client.get(
-            "/deposits",
+            "/actions",
             headers=auth_headers(current_user["telegram_id"]),
             params={"period_start": period_start, "period_end": period_end, "limit": 10},
         )
 
     if response.status_code != 200:
-        await message.answer("Не удалось получить список депозитов.")
+        await message.answer("Не удалось получить список действий.")
         return
 
-    deposits = response.json()
-    if not deposits:
-        await message.answer("За последние 30 дней депозитов нет.")
+    actions = response.json()
+    if not actions:
+        await message.answer("За последние 30 дней действий нет.")
         return
 
-    for deposit in deposits:
-        text = f"{deposit['client_ref']} — {deposit['amount']} {deposit['currency']}"
+    for action in actions:
+        label = action["action_type"]
+        if action["amount"] is not None:
+            text = f"{label}: {action['player_id'] or '—'} — {action['amount']} {action['currency']}"
+        else:
+            text = f"{label}: {action['player_id'] or '—'}"
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text="🗑 Запросить удаление", callback_data=f"req_del:{deposit['id']}")]
+                [InlineKeyboardButton(text="🗑 Запросить удаление", callback_data=f"req_del:{action['id']}")]
             ]
         )
         await message.answer(text, reply_markup=keyboard)
@@ -43,11 +47,11 @@ async def my_deposits(message: Message, current_user: dict) -> None:
 
 @router.callback_query(F.data.startswith("req_del:"))
 async def request_delete(callback: CallbackQuery, current_user: dict) -> None:
-    deposit_id = callback.data.split(":", maxsplit=1)[1]
+    action_id = callback.data.split(":", maxsplit=1)[1]
 
     async with httpx.AsyncClient(base_url=settings.backend_url) as client:
         response = await client.post(
-            f"/deposits/{deposit_id}/change-requests",
+            f"/actions/{action_id}/change-requests",
             headers=auth_headers(current_user["telegram_id"]),
             json={"action": "delete"},
         )
@@ -84,16 +88,18 @@ async def pending_requests(message: Message, current_user: dict) -> None:
     async with httpx.AsyncClient(base_url=settings.backend_url) as client:
         headers = auth_headers(current_user["telegram_id"])
         for req in requests:
-            deposit_response = await client.get(f"/deposits/{req['deposit_id']}", headers=headers)
-            deposit = deposit_response.json() if deposit_response.status_code == 200 else None
+            action_response = await client.get(f"/actions/{req['action_id']}", headers=headers)
+            action = action_response.json() if action_response.status_code == 200 else None
 
             action_label = "правку" if req["action"] == "update" else "удаление"
-            deposit_line = (
-                f"{deposit['client_ref']} — {deposit['amount']} {deposit['currency']}"
-                if deposit
-                else "депозит не найден"
-            )
-            text = f"Запрос на {action_label}: {deposit_line}"
+            if action:
+                if action["amount"] is not None:
+                    action_line = f"{action['action_type']}: {action['player_id'] or '—'} — {action['amount']} {action['currency']}"
+                else:
+                    action_line = f"{action['action_type']}: {action['player_id'] or '—'}"
+            else:
+                action_line = "действие не найдено"
+            text = f"Запрос на {action_label}: {action_line}"
             if req["action"] == "update" and req["payload"]:
                 text += f"\nНовые значения: {req['payload']}"
 

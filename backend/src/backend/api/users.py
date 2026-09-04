@@ -168,7 +168,7 @@ async def set_commission_rate(
 
 @router.get("/teams", response_model=list[TeamOut])
 async def list_teams(
-    user: User = Depends(require_role(Role.ADMIN, Role.OWNER)),
+    user: User = Depends(require_role(Role.ADMIN, Role.OWNER, Role.ANALYTIC)),
     db: AsyncSession = Depends(get_db),
 ) -> list[Team]:
     result = await db.execute(select(Team).where(Team.org_id == user.org_id))

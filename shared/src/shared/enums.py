@@ -6,6 +6,7 @@ class Role(str, enum.Enum):
     TEAMLEAD = "teamlead"
     ADMIN = "admin"
     OWNER = "owner"
+    ANALYTIC = "analytic"
 
 
 class UserStatus(str, enum.Enum):
@@ -13,12 +14,23 @@ class UserStatus(str, enum.Enum):
     BLOCKED = "blocked"
 
 
-class DepositSource(str, enum.Enum):
+class ActionType(str, enum.Enum):
+    REGISTRATION = "registration"
+    FIRST_DEPOSIT = "first_deposit"
+    REPEAT_DEPOSIT = "repeat_deposit"
+    LEAD = "lead"
+
+
+# Deposit-equivalent action types — what v0.1's rating/goals/commission logic counted.
+DEPOSIT_ACTION_TYPES = (ActionType.FIRST_DEPOSIT, ActionType.REPEAT_DEPOSIT)
+
+
+class ActionSource(str, enum.Enum):
     MANUAL = "manual"
     AFFILIATE_API = "affiliate_api"
 
 
-class DepositStatus(str, enum.Enum):
+class ActionStatus(str, enum.Enum):
     CONFIRMED = "confirmed"
     PENDING_REVIEW = "pending_review"
 

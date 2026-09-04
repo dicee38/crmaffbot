@@ -8,10 +8,11 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.sql import func
 
 from shared.enums import (
+    ActionSource,
+    ActionStatus,
+    ActionType,
     AuditAction,
     ChangeRequestStatus,
-    DepositSource,
-    DepositStatus,
     GoalScope,
     Role,
     UserStatus,
@@ -65,62 +66,112 @@ class Team(Base):
     )
 
 
-class Deposit(Base):
-    __tablename__ = "deposits"
+class Platform(Base):
+    """Партнёрская платформа-провайдер (ТЗ §11.4) — по записи на каждую подключённую
+    партнёрку (PocketOption, Binolla, ...). adapter_key выбирает реализацию
+    AffiliateAdapter из реестра; своего провайдера код адаптеров не знает."""
+
+    __tablename__ = "platforms"
+    __table_args__ = (UniqueConstraint("org_id", "slug", name="uq_platforms_org_slug"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"))
+    slug: Mapped[str]
+    name: Mapped[str]
+    adapter_key: Mapped[str]
+    webhook_secret: Mapped[str]
+    is_active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ChannelGroup(Base):
+    __tablename__ = "channel_groups"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"))
+    name: Mapped[str]
+
+
+class Channel(Base):
+    __tablename__ = "channels"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"))
+    platform_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("platforms.id"))
+    channel_group_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("channel_groups.id"), nullable=True
+    )
+    name: Mapped[str]
+    external_code: Mapped[str | None] = mapped_column(nullable=True)
+
+
+class MopAction(Base):
+    """Заменяет Deposit (v0.1) — обобщённый лог действий воронки (ТЗ §6/§11):
+    регистрация / первый депозит / повторный депозит / лид."""
+
+    __tablename__ = "mop_actions"
     __table_args__ = (
-        UniqueConstraint("org_id", "external_id", name="uq_deposits_org_external_id"),
-        Index("ix_deposits_org_manager_created", "org_id", "manager_id", "created_at"),
+        UniqueConstraint("org_id", "external_id", name="uq_mop_actions_org_external_id"),
+        Index("ix_mop_actions_org_mop_created", "org_id", "mop_id", "created_at"),
+        Index("ix_mop_actions_org_channel_created", "org_id", "channel_id", "created_at"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"))
-    manager_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
-    client_ref: Mapped[str]
-    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
-    currency: Mapped[str] = mapped_column(default="USD")
-    source: Mapped[DepositSource] = mapped_column(_pg_enum(DepositSource, "deposit_source"))
+    action_type: Mapped[ActionType] = mapped_column(_pg_enum(ActionType, "action_type"))
+    mop_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    channel_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("channels.id"), nullable=True)
+    player_id: Mapped[str | None] = mapped_column(nullable=True)
+    amount: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    currency: Mapped[str | None] = mapped_column(nullable=True)
+    lead_count: Mapped[int] = mapped_column(default=1)
+    source: Mapped[ActionSource] = mapped_column(_pg_enum(ActionSource, "action_source"))
     external_id: Mapped[str | None] = mapped_column(nullable=True)
-    status: Mapped[DepositStatus] = mapped_column(
-        _pg_enum(DepositStatus, "deposit_status"), default=DepositStatus.CONFIRMED
+    status: Mapped[ActionStatus] = mapped_column(
+        _pg_enum(ActionStatus, "action_status"), default=ActionStatus.CONFIRMED
     )
+    warnings: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    # Soft-delete: keeps the row so deposit_audit_log's FK to it stays valid after "deletion".
+    # Soft-delete: keeps the row so action_audit_log's FK to it stays valid after "deletion".
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
-class DepositEventRaw(Base):
-    """Промежуточная таблица сырых событий партнёрки (спека §4.5, §6). Сопоставление с депозитом происходит асинхронно после приёма."""
+class ActionEventRaw(Base):
+    """Промежуточная таблица сырых событий партнёрских платформ (ТЗ §4.5, §6).
+    Сопоставление с действием происходит асинхронно после приёма."""
 
-    __tablename__ = "deposit_events_raw"
+    __tablename__ = "action_events_raw"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"))
-    provider: Mapped[str]
+    platform_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("platforms.id"))
     payload: Mapped[dict] = mapped_column(JSONB)
-    matched_deposit_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("deposits.id"), nullable=True)
+    matched_action_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("mop_actions.id"), nullable=True
+    )
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
-class DepositAuditLog(Base):
-    __tablename__ = "deposit_audit_log"
+class ActionAuditLog(Base):
+    __tablename__ = "action_audit_log"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    deposit_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("deposits.id"))
+    action_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("mop_actions.id"))
     changed_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
     action: Mapped[AuditAction] = mapped_column(_pg_enum(AuditAction, "audit_action"))
     diff: Mapped[dict] = mapped_column(JSONB)
     changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
-class DepositChangeRequest(Base):
-    """Не в исходной схеме §6 — добавлено для реального flow согласования правок (§4.8):
-    менеджер/тимлид/админ просит правку или удаление ЛЮБОГО депозита (включая свой),
-    применяется только после подтверждения тимлидом/админом."""
+class ActionChangeRequest(Base):
+    """ТЗ §4.8: правка или удаление ЛЮБОГО действия, включая своё, — только через
+    запрос на согласование, применяется после подтверждения тимлидом/админом."""
 
-    __tablename__ = "deposit_change_requests"
+    __tablename__ = "action_change_requests"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    deposit_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("deposits.id"))
+    action_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("mop_actions.id"))
     requested_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
     action: Mapped[AuditAction] = mapped_column(_pg_enum(AuditAction, "audit_action"))
     payload: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

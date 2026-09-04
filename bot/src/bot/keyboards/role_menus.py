@@ -42,4 +42,9 @@ def menu_for_role(role: str) -> ReplyKeyboardMarkup:
         )
     if role == "owner":
         return _menu([[KeyboardButton(text="Топ компании")]], with_dashboard=True)
+    if role == "analytic":
+        return _menu(
+            [[KeyboardButton(text="Топ команды"), KeyboardButton(text="Топ компании")]],
+            with_dashboard=True,
+        )
     raise ValueError(f"Unknown role: {role}")

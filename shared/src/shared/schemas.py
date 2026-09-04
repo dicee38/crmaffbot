@@ -2,41 +2,56 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from shared.enums import (
+    ActionSource,
+    ActionStatus,
+    ActionType,
     AuditAction,
     ChangeRequestStatus,
-    DepositSource,
-    DepositStatus,
     GoalScope,
     Role,
     UserStatus,
 )
 
 
-class DepositCreate(BaseModel):
-    client_ref: str
-    amount: Decimal = Field(gt=0)
+class ActionCreate(BaseModel):
+    action_type: ActionType
+    mop_id: uuid.UUID | None = None
+    channel_id: uuid.UUID | None = None
+    player_id: str | None = None
+    amount: Decimal | None = Field(default=None, gt=0)
     currency: str = "USD"
-    manager_id: uuid.UUID | None = None
+    lead_count: int = Field(default=1, gt=0)
+
+    @model_validator(mode="after")
+    def _amount_required_for_deposits(self) -> "ActionCreate":
+        if self.action_type in (ActionType.FIRST_DEPOSIT, ActionType.REPEAT_DEPOSIT) and self.amount is None:
+            raise ValueError("amount is required for first_deposit/repeat_deposit")
+        return self
 
 
-class DepositUpdate(BaseModel):
-    client_ref: str | None = None
+class ActionUpdate(BaseModel):
+    player_id: str | None = None
     amount: Decimal | None = Field(default=None, gt=0)
     currency: str | None = None
+    channel_id: uuid.UUID | None = None
 
 
-class DepositOut(BaseModel):
+class ActionOut(BaseModel):
     id: uuid.UUID
     org_id: uuid.UUID
-    manager_id: uuid.UUID
-    client_ref: str
-    amount: Decimal
-    currency: str
-    source: DepositSource
-    status: DepositStatus
+    action_type: ActionType
+    mop_id: uuid.UUID
+    channel_id: uuid.UUID | None
+    player_id: str | None
+    amount: Decimal | None
+    currency: str | None
+    lead_count: int
+    source: ActionSource
+    status: ActionStatus
+    warnings: list | None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -44,12 +59,12 @@ class DepositOut(BaseModel):
 
 class ChangeRequestCreate(BaseModel):
     action: AuditAction  # only "update" or "delete" is valid here
-    payload: DepositUpdate | None = None  # required when action == "update"
+    payload: ActionUpdate | None = None  # required when action == "update"
 
 
 class ChangeRequestOut(BaseModel):
     id: uuid.UUID
-    deposit_id: uuid.UUID
+    action_id: uuid.UUID
     requested_by: uuid.UUID
     action: AuditAction
     payload: dict | None
@@ -63,7 +78,7 @@ class ChangeRequestOut(BaseModel):
 
 class AuditLogOut(BaseModel):
     id: uuid.UUID
-    deposit_id: uuid.UUID
+    action_id: uuid.UUID
     changed_by: uuid.UUID
     action: AuditAction
     diff: dict
@@ -136,6 +151,59 @@ class TeamOut(BaseModel):
     org_id: uuid.UUID
     name: str
     teamlead_id: uuid.UUID | None
+
+    model_config = {"from_attributes": True}
+
+
+class PlatformCreate(BaseModel):
+    slug: str
+    name: str
+    adapter_key: str
+    webhook_secret: str
+
+
+class PlatformUpdate(BaseModel):
+    name: str | None = None
+    is_active: bool | None = None
+
+
+class PlatformOut(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    slug: str
+    name: str
+    adapter_key: str
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class ChannelGroupCreate(BaseModel):
+    name: str
+
+
+class ChannelGroupOut(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    name: str
+
+    model_config = {"from_attributes": True}
+
+
+class ChannelCreate(BaseModel):
+    platform_id: uuid.UUID
+    channel_group_id: uuid.UUID | None = None
+    name: str
+    external_code: str | None = None
+
+
+class ChannelOut(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    platform_id: uuid.UUID
+    channel_group_id: uuid.UUID | None
+    name: str
+    external_code: str | None
 
     model_config = {"from_attributes": True}
 
