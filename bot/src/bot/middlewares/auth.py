@@ -5,7 +5,7 @@ import httpx
 from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject
 
-from bot.config import settings
+from bot.config import auth_headers, settings
 
 
 class AuthMiddleware(BaseMiddleware):
@@ -23,9 +23,7 @@ class AuthMiddleware(BaseMiddleware):
             return await handler(event, data)
 
         async with httpx.AsyncClient(base_url=settings.backend_url) as client:
-            response = await client.get(
-                "/users/me", headers={"X-Telegram-User-Id": str(tg_user.id)}
-            )
+            response = await client.get("/users/me", headers=auth_headers(tg_user.id))
 
         if response.status_code != 200:
             return None

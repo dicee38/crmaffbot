@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     # Same bot token as bot/.env — backend pushes Telegram notifications directly,
     # independent of the aiogram long-polling process (ТЗ §4.4).
     bot_token: str | None = None
+    # Shared secret only the bot process knows — required alongside X-Telegram-User-Id so a
+    # browser (e.g. the Mini App) can't just forge that header to impersonate any user.
+    internal_api_secret: str = "dev-internal-secret"
     # Exact value is an open question (ТЗ §9) until the business sets one; configurable for now.
     large_deposit_threshold: Decimal = Decimal("1000")
     # Hour (UTC) the daily/weekly digest and idle-manager check run at.

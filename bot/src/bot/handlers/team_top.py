@@ -4,7 +4,7 @@ import httpx
 from aiogram import F, Router
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from bot.config import settings
+from bot.config import auth_headers, settings
 
 router = Router(name="team_top")
 
@@ -19,7 +19,7 @@ async def _fetch_top(telegram_id: int, path: str, params: dict) -> tuple[int, li
     async with httpx.AsyncClient(base_url=settings.backend_url) as client:
         response = await client.get(
             path,
-            headers={"X-Telegram-User-Id": str(telegram_id)},
+            headers=auth_headers(telegram_id),
             params={"period_start": period_start, "period_end": period_end, **params},
         )
     if response.status_code != 200:
@@ -49,7 +49,7 @@ async def team_top(message: Message, current_user: dict) -> None:
     # admin/owner have no team of their own — let them pick which team to view.
     async with httpx.AsyncClient(base_url=settings.backend_url) as client:
         response = await client.get(
-            "/users/teams", headers={"X-Telegram-User-Id": str(current_user["telegram_id"])}
+            "/users/teams", headers=auth_headers(current_user["telegram_id"])
         )
 
     if response.status_code != 200:

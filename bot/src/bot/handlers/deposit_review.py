@@ -5,7 +5,7 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from bot.config import settings
+from bot.config import auth_headers, settings
 
 router = Router(name="deposit_review")
 
@@ -18,7 +18,7 @@ async def my_deposits(message: Message, current_user: dict) -> None:
     async with httpx.AsyncClient(base_url=settings.backend_url) as client:
         response = await client.get(
             "/deposits",
-            headers={"X-Telegram-User-Id": str(current_user["telegram_id"])},
+            headers=auth_headers(current_user["telegram_id"]),
             params={"period_start": period_start, "period_end": period_end, "limit": 10},
         )
 
@@ -48,7 +48,7 @@ async def request_delete(callback: CallbackQuery, current_user: dict) -> None:
     async with httpx.AsyncClient(base_url=settings.backend_url) as client:
         response = await client.post(
             f"/deposits/{deposit_id}/change-requests",
-            headers={"X-Telegram-User-Id": str(current_user["telegram_id"])},
+            headers=auth_headers(current_user["telegram_id"]),
             json={"action": "delete"},
         )
 
@@ -68,7 +68,7 @@ async def pending_requests(message: Message, current_user: dict) -> None:
     async with httpx.AsyncClient(base_url=settings.backend_url) as client:
         response = await client.get(
             "/change-requests",
-            headers={"X-Telegram-User-Id": str(current_user["telegram_id"])},
+            headers=auth_headers(current_user["telegram_id"]),
             params={"status": "pending"},
         )
 
@@ -82,7 +82,7 @@ async def pending_requests(message: Message, current_user: dict) -> None:
         return
 
     async with httpx.AsyncClient(base_url=settings.backend_url) as client:
-        headers = {"X-Telegram-User-Id": str(current_user["telegram_id"])}
+        headers = auth_headers(current_user["telegram_id"])
         for req in requests:
             deposit_response = await client.get(f"/deposits/{req['deposit_id']}", headers=headers)
             deposit = deposit_response.json() if deposit_response.status_code == 200 else None
@@ -116,7 +116,7 @@ async def review_request(callback: CallbackQuery, current_user: dict) -> None:
     async with httpx.AsyncClient(base_url=settings.backend_url) as client:
         response = await client.post(
             f"/change-requests/{request_id}/{endpoint}",
-            headers={"X-Telegram-User-Id": str(current_user["telegram_id"])},
+            headers=auth_headers(current_user["telegram_id"]),
         )
 
     await callback.answer()

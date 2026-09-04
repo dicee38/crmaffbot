@@ -1,9 +1,11 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from backend.api import audit, change_requests, deposits, goals, reports, stats, users, webhooks
 from backend.config import settings
@@ -43,6 +45,12 @@ app.include_router(goals.router)
 app.include_router(reports.router)
 app.include_router(change_requests.router)
 app.include_router(audit.router)
+
+app.mount(
+    "/miniapp",
+    StaticFiles(directory=Path(__file__).parent / "miniapp_static", html=True),
+    name="miniapp",
+)
 
 
 @app.get("/health")

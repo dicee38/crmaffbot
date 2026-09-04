@@ -3,7 +3,7 @@ from aiogram import Router
 from aiogram.filters import Command, CommandObject
 from aiogram.types import Message
 
-from bot.config import settings
+from bot.config import auth_headers, settings
 
 router = Router(name="admin")
 
@@ -26,7 +26,7 @@ async def add_manager(message: Message, command: CommandObject, current_user: di
     async with httpx.AsyncClient(base_url=settings.backend_url) as client:
         response = await client.post(
             "/users",
-            headers={"X-Telegram-User-Id": str(current_user["telegram_id"])},
+            headers=auth_headers(current_user["telegram_id"]),
             json={"telegram_id": telegram_id, "full_name": full_name, "role": "manager"},
         )
 
@@ -48,7 +48,7 @@ async def block_user(message: Message, command: CommandObject, current_user: dic
     telegram_id = int(command.args)
     async with httpx.AsyncClient(base_url=settings.backend_url) as client:
         list_response = await client.get(
-            "/users", headers={"X-Telegram-User-Id": str(current_user["telegram_id"])}
+            "/users", headers=auth_headers(current_user["telegram_id"])
         )
         target = next((u for u in list_response.json() if u["telegram_id"] == telegram_id), None)
         if target is None:
@@ -57,7 +57,7 @@ async def block_user(message: Message, command: CommandObject, current_user: dic
 
         await client.post(
             f"/users/{target['id']}/block",
-            headers={"X-Telegram-User-Id": str(current_user["telegram_id"])},
+            headers=auth_headers(current_user["telegram_id"]),
         )
 
     await message.answer("Пользователь заблокирован.")
@@ -75,7 +75,7 @@ async def add_team(message: Message, command: CommandObject, current_user: dict)
     async with httpx.AsyncClient(base_url=settings.backend_url) as client:
         response = await client.post(
             "/users/teams",
-            headers={"X-Telegram-User-Id": str(current_user["telegram_id"])},
+            headers=auth_headers(current_user["telegram_id"]),
             json={"name": command.args.strip()},
         )
 
@@ -106,7 +106,7 @@ async def add_teamlead(message: Message, command: CommandObject, current_user: d
     telegram_id, team_name = int(left_parts[0]), left_parts[1].strip()
 
     async with httpx.AsyncClient(base_url=settings.backend_url) as client:
-        headers = {"X-Telegram-User-Id": str(current_user["telegram_id"])}
+        headers = auth_headers(current_user["telegram_id"])
 
         teams_response = await client.get("/users/teams", headers=headers)
         team = next(

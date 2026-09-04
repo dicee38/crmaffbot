@@ -26,3 +26,4 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/backend"]
+artifacts = ["src/backend/miniapp_static/**"]

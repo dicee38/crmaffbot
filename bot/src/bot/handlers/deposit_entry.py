@@ -5,7 +5,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
 
-from bot.config import settings
+from bot.config import auth_headers, settings
 from bot.keyboards.role_menus import menu_for_role
 
 router = Router(name="deposit_entry")
@@ -44,7 +44,7 @@ async def deposit_client(message: Message, state: FSMContext, current_user: dict
     async with httpx.AsyncClient(base_url=settings.backend_url) as client:
         response = await client.post(
             "/deposits",
-            headers={"X-Telegram-User-Id": str(current_user["telegram_id"])},
+            headers=auth_headers(current_user["telegram_id"]),
             json={"client_ref": message.text, "amount": data["amount"], "currency": "USD"},
         )
     await state.clear()

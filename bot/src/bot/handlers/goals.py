@@ -6,7 +6,7 @@ from aiogram import Router
 from aiogram.filters import Command, CommandObject
 from aiogram.types import Message
 
-from bot.config import settings
+from bot.config import auth_headers, settings
 
 router = Router(name="goals")
 
@@ -34,7 +34,7 @@ async def goal_progress(message: Message, current_user: dict) -> None:
     async with httpx.AsyncClient(base_url=settings.backend_url) as client:
         response = await client.get(
             "/goals/progress",
-            headers={"X-Telegram-User-Id": str(current_user["telegram_id"])},
+            headers=auth_headers(current_user["telegram_id"]),
             params={"scope": scope, "scope_id": scope_id, "period": period},
         )
 
@@ -81,7 +81,7 @@ async def set_goal(message: Message, command: CommandObject, current_user: dict)
     async with httpx.AsyncClient(base_url=settings.backend_url) as client:
         response = await client.post(
             "/goals",
-            headers={"X-Telegram-User-Id": str(current_user["telegram_id"])},
+            headers=auth_headers(current_user["telegram_id"]),
             json={
                 "scope": "team",
                 "scope_id": current_user["team_id"],

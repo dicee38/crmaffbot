@@ -5,7 +5,7 @@ from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import BufferedInputFile, Message
 
-from bot.config import settings
+from bot.config import auth_headers, settings
 
 router = Router(name="reports")
 
@@ -32,7 +32,7 @@ async def export_report(message: Message, current_user: dict) -> None:
     async with httpx.AsyncClient(base_url=settings.backend_url) as client:
         response = await client.get(
             "/reports/export",
-            headers={"X-Telegram-User-Id": str(current_user["telegram_id"])},
+            headers=auth_headers(current_user["telegram_id"]),
             params=params,
         )
 

@@ -4,7 +4,7 @@ import httpx
 from aiogram import F, Router
 from aiogram.types import Message
 
-from bot.config import settings
+from bot.config import auth_headers, settings
 
 router = Router(name="my_stats")
 
@@ -17,7 +17,7 @@ async def my_stats(message: Message, current_user: dict) -> None:
     async with httpx.AsyncClient(base_url=settings.backend_url) as client:
         response = await client.get(
             "/stats/me",
-            headers={"X-Telegram-User-Id": str(current_user["telegram_id"])},
+            headers=auth_headers(current_user["telegram_id"]),
             params={"period_start": period_start.isoformat(), "period_end": today.isoformat()},
         )
 
