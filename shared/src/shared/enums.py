@@ -32,3 +32,9 @@ class AuditAction(str, enum.Enum):
     CREATE = "create"
     UPDATE = "update"
     DELETE = "delete"
+
+
+class ChangeRequestStatus(str, enum.Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"

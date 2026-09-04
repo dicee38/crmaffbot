@@ -8,7 +8,7 @@ from aiogram.filters import CommandStart
 from aiogram.types import Message
 
 from bot.config import settings
-from bot.handlers import admin, deposit_entry, goals, my_stats, reports, team_top
+from bot.handlers import admin, deposit_entry, deposit_review, goals, my_stats, reports, team_top
 from bot.keyboards.role_menus import menu_for_role
 from bot.middlewares.auth import AuthMiddleware
 
@@ -29,6 +29,7 @@ async def main() -> None:
     dp.update.middleware(AuthMiddleware())
     dp.message.register(cmd_start, CommandStart())
     dp.include_router(deposit_entry.router)
+    dp.include_router(deposit_review.router)
     dp.include_router(my_stats.router)
     dp.include_router(team_top.router)
     dp.include_router(goals.router)

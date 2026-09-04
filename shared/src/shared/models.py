@@ -7,7 +7,15 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.sql import func
 
-from shared.enums import AuditAction, DepositSource, DepositStatus, GoalScope, Role, UserStatus
+from shared.enums import (
+    AuditAction,
+    ChangeRequestStatus,
+    DepositSource,
+    DepositStatus,
+    GoalScope,
+    Role,
+    UserStatus,
+)
 
 
 class Base(DeclarativeBase):
@@ -100,6 +108,26 @@ class DepositAuditLog(Base):
     action: Mapped[AuditAction] = mapped_column(_pg_enum(AuditAction, "audit_action"))
     diff: Mapped[dict] = mapped_column(JSONB)
     changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class DepositChangeRequest(Base):
+    """Не в исходной схеме §6 — добавлено для реального flow согласования правок (§4.8):
+    менеджер/тимлид/админ просит правку или удаление ЛЮБОГО депозита (включая свой),
+    применяется только после подтверждения тимлидом/админом."""
+
+    __tablename__ = "deposit_change_requests"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    deposit_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("deposits.id"))
+    requested_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    action: Mapped[AuditAction] = mapped_column(_pg_enum(AuditAction, "audit_action"))
+    payload: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    status: Mapped[ChangeRequestStatus] = mapped_column(
+        _pg_enum(ChangeRequestStatus, "change_request_status"), default=ChangeRequestStatus.PENDING
+    )
+    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class Goal(Base):

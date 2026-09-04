@@ -1,8 +1,10 @@
 import httpx
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import settings
-from shared.models import Deposit, Team, User
+from shared.enums import Role
+from shared.models import Deposit, DepositChangeRequest, Team, User
 
 
 async def send_telegram_message(telegram_id: int, text: str) -> None:
@@ -46,3 +48,34 @@ async def notify_deposit_created(db: AsyncSession, deposit: Deposit, created_by:
         teamlead.telegram_id,
         f"Крупная сделка в команде: {manager.full_name} внёс депозит {deposit.amount} {deposit.currency}.",
     )
+
+
+async def notify_change_request_created(
+    db: AsyncSession, request: DepositChangeRequest, deposit: Deposit
+) -> None:
+    """ТЗ §4.8: тимлид/админ должны узнать о новом запросе, иначе очередь /pending
+    просто не проверят."""
+    text = (
+        f"Новый запрос на {'правку' if request.action.value == 'update' else 'удаление'} "
+        f"депозита {deposit.amount} {deposit.currency} (клиент: {deposit.client_ref}). "
+        f"Проверить: /pending"
+    )
+
+    recipients: set[int] = set()
+
+    if deposit.manager_id is not None:
+        manager = await db.get(User, deposit.manager_id)
+        if manager is not None and manager.team_id is not None:
+            team = await db.get(Team, manager.team_id)
+            if team is not None and team.teamlead_id is not None:
+                teamlead = await db.get(User, team.teamlead_id)
+                if teamlead is not None:
+                    recipients.add(teamlead.telegram_id)
+
+    admins = (
+        await db.execute(select(User).where(User.org_id == deposit.org_id, User.role == Role.ADMIN))
+    ).scalars().all()
+    recipients.update(admin.telegram_id for admin in admins)
+
+    for telegram_id in recipients:
+        await send_telegram_message(telegram_id, text)

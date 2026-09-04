@@ -4,7 +4,15 @@ from decimal import Decimal
 
 from pydantic import BaseModel, Field
 
-from shared.enums import DepositSource, DepositStatus, GoalScope, Role, UserStatus
+from shared.enums import (
+    AuditAction,
+    ChangeRequestStatus,
+    DepositSource,
+    DepositStatus,
+    GoalScope,
+    Role,
+    UserStatus,
+)
 
 
 class DepositCreate(BaseModel):
@@ -30,6 +38,36 @@ class DepositOut(BaseModel):
     source: DepositSource
     status: DepositStatus
     created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ChangeRequestCreate(BaseModel):
+    action: AuditAction  # only "update" or "delete" is valid here
+    payload: DepositUpdate | None = None  # required when action == "update"
+
+
+class ChangeRequestOut(BaseModel):
+    id: uuid.UUID
+    deposit_id: uuid.UUID
+    requested_by: uuid.UUID
+    action: AuditAction
+    payload: dict | None
+    status: ChangeRequestStatus
+    reviewed_by: uuid.UUID | None
+    created_at: datetime
+    reviewed_at: datetime | None
+
+    model_config = {"from_attributes": True}
+
+
+class AuditLogOut(BaseModel):
+    id: uuid.UUID
+    deposit_id: uuid.UUID
+    changed_by: uuid.UUID
+    action: AuditAction
+    diff: dict
+    changed_at: datetime
 
     model_config = {"from_attributes": True}
 
