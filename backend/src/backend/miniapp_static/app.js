@@ -1,6 +1,12 @@
 const tg = window.Telegram?.WebApp;
 tg?.ready();
 tg?.expand();
+try {
+  tg?.setHeaderColor?.("#0a0f0c");
+  tg?.setBackgroundColor?.("#0a0f0c");
+} catch {
+  // Older Telegram clients don't support these calls — the CSS background still applies.
+}
 
 const initData = tg?.initData || "";
 
@@ -433,20 +439,42 @@ async function loadStats() {
     const deltaClass = deltaKnown ? (stats.change_percent >= 0 ? "up" : "down") : "";
     const deltaText = deltaKnown ? `${stats.change_percent >= 0 ? "▲" : "▼"} ${Math.abs(stats.change_percent).toFixed(0)}%` : "";
 
-    let html = `<h2 class="section-title">Этот месяц</h2>
+    const rankBanner =
+      stats.rank === 1
+        ? `<div class="hero-banner">🏆 1 место в команде</div>`
+        : stats.rank
+          ? `<div class="hero-banner muted-banner">${stats.rank} место из ${stats.team_size} в команде</div>`
+          : "";
+
+    let html = `
+    <div class="hero-card">
+      <div class="hero-row">
+        <div class="hero-stat">
+          <div class="hero-label">Касса</div>
+          <div class="hero-value">${money(stats.cashbox)}</div>
+        </div>
+        <div class="hero-divider"></div>
+        <div class="hero-stat">
+          <div class="hero-label">Зарплата</div>
+          <div class="hero-value accent">${money(stats.salary_amount)}</div>
+        </div>
+      </div>
+      ${rankBanner}
+    </div>
+
+    <h2 class="section-title">Этот месяц</h2>
     <div class="stat-grid">
       <div class="card stat-card"><div class="label">Сумма</div><div class="value">${money(stats.total_amount)}</div>${deltaKnown ? `<div class="delta ${deltaClass}">${deltaText}</div>` : ""}</div>
       <div class="card stat-card"><div class="label">Депозитов</div><div class="value">${stats.deposit_count}</div></div>
     </div>
-    <div class="card stat-card mt-4"><div class="label">Место в команде</div><div class="value">${stats.rank ? `${stats.rank} из ${stats.team_size}` : "нет команды"}</div></div>
-    <h2 class="section-title">Касса и зарплата</h2>
+
+    <h2 class="section-title">Разбивка</h2>
     <div class="stat-grid">
       <div class="card stat-card"><div class="label">FD</div><div class="value">${money(stats.fd_amount)}</div></div>
       <div class="card stat-card"><div class="label">RD</div><div class="value">${money(stats.rd_amount)}</div></div>
       <div class="card stat-card"><div class="label">Вывод</div><div class="value">${money(stats.withdrawal_amount)}</div></div>
-      <div class="card stat-card"><div class="label">Касса</div><div class="value">${money(stats.cashbox)}</div></div>
-    </div>
-    <div class="card stat-card mt-4"><div class="label">Зарплата (FD ${stats.fd_commission_rate}% + RD ${stats.rd_commission_rate}%)</div><div class="value">${money(stats.salary_amount)}</div></div>`;
+      <div class="card stat-card"><div class="label">Ставка</div><div class="value rate">${stats.fd_commission_rate}% / ${stats.rd_commission_rate}%</div></div>
+    </div>`;
 
     html += `<h2 class="section-title">План на месяц</h2><div id="stats-goal">${skeleton(2)}</div>`;
     view.innerHTML = html;
