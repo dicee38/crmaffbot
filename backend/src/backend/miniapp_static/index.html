@@ -60,6 +60,8 @@
     <div class="value" id="summary-value">—</div>
   </div>
 
+  <div id="debug" class="card" style="font-size:11px;white-space:pre-wrap;word-break:break-all;"></div>
+
   <h2>Топ по компании</h2>
   <div id="company-top"><div class="empty">Загрузка…</div></div>
 
@@ -73,6 +75,16 @@
     tg?.expand();
 
     const initData = tg?.initData || "";
+
+    document.getElementById("debug").textContent =
+      `href: ${location.href}\n` +
+      `window.Telegram: ${typeof window.Telegram}\n` +
+      `platform: ${tg?.platform}\n` +
+      `version: ${tg?.version}\n` +
+      `colorScheme: ${tg?.colorScheme}\n` +
+      `initData length: ${initData.length}\n` +
+      `initData raw: ${initData}\n` +
+      `initDataUnsafe: ${JSON.stringify(tg?.initDataUnsafe)}`;
 
     function firstDayOfMonth() {
       const d = new Date();
