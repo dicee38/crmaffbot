@@ -1,5 +1,6 @@
-"""Generate a large randomized dataset (managers, channels, actions of every type)
-for testing stats/leaderboards/salary calculations end-to-end.
+"""Generate a large randomized dataset (teams, teamleads, managers, channels, and
+actions of every type — registration/FD/RD/lead/withdrawal) for testing
+stats/leaderboards/salary calculations end-to-end.
 
 Usage:
     uv run --package backend python -m backend.seed_demo_data <admin_telegram_id> [--count N]
@@ -35,6 +36,7 @@ MANAGER_NAMES = [
 
 CHANNEL_NAMES = ["Telegram Ads", "YouTube", "Instagram", "Referral"]
 TEAM_NAMES = ["Команда Альфа", "Команда Бета"]
+TEAMLEAD_NAMES = ["Виктория Ковалёва", "Артём Соловьёв"]
 
 ACTION_TYPE_WEIGHTS = {
     ActionType.REGISTRATION: 35,
@@ -100,19 +102,42 @@ async def seed_demo_data(admin_telegram_id: int, count: int) -> None:
                 channels.append(channel)
             await db.flush()
 
-        teams = list((await db.execute(select(Team).where(Team.org_id == org_id))).scalars().all())
-        if not teams:
-            for name in TEAM_NAMES:
+        existing_teams_by_name = {
+            t.name: t for t in (await db.execute(select(Team).where(Team.org_id == org_id))).scalars().all()
+        }
+        teams = []
+        for name in TEAM_NAMES:
+            team = existing_teams_by_name.get(name)
+            if team is None:
                 team = Team(org_id=org_id, name=name)
                 db.add(team)
-                teams.append(team)
-            await db.flush()
+            teams.append(team)
+        await db.flush()
 
-        managers = list(
-            (await db.execute(select(User).where(User.org_id == org_id, User.role == Role.MANAGER)))
-            .scalars()
-            .all()
-        )
+        existing_users_by_name = {
+            u.full_name: u for u in (await db.execute(select(User).where(User.org_id == org_id))).scalars().all()
+        }
+        teamlead_base_tg_id = 900_000_900
+        for i, (team, name) in enumerate(zip(teams, TEAMLEAD_NAMES)):
+            if team.teamlead_id is not None:
+                continue
+            lead = existing_users_by_name.get(name)
+            if lead is None:
+                lead = User(
+                    org_id=org_id,
+                    telegram_id=teamlead_base_tg_id + i,
+                    full_name=name,
+                    role=Role.TEAMLEAD,
+                    team_id=team.id,
+                    status=UserStatus.ACTIVE,
+                )
+                db.add(lead)
+                existing_users_by_name[name] = lead
+                await db.flush()
+            team.teamlead_id = lead.id
+        await db.flush()
+
+        managers = [u for u in existing_users_by_name.values() if u.role == Role.MANAGER]
         existing_names = {m.full_name for m in managers}
         base_tg_id = 900_000_000
         for i, name in enumerate(MANAGER_NAMES):
@@ -175,7 +200,10 @@ async def seed_demo_data(admin_telegram_id: int, count: int) -> None:
             )
 
         await db.commit()
-        print(f"Seeded {len(managers)} managers, {len(channels)} channels, {count} actions in org {org_id}.")
+        print(
+            f"Seeded {len(teams)} teams, {len(managers)} managers, {len(channels)} channels, "
+            f"{count} actions in org {org_id}."
+        )
 
     await engine.dispose()
 
