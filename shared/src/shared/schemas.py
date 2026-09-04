@@ -5,6 +5,7 @@ from decimal import Decimal
 from pydantic import BaseModel, Field, model_validator
 
 from shared.enums import (
+    AMOUNT_ACTION_TYPES,
     ActionSource,
     ActionStatus,
     ActionType,
@@ -27,8 +28,8 @@ class ActionCreate(BaseModel):
 
     @model_validator(mode="after")
     def _amount_required_for_deposits(self) -> "ActionCreate":
-        if self.action_type in (ActionType.FIRST_DEPOSIT, ActionType.REPEAT_DEPOSIT) and self.amount is None:
-            raise ValueError("amount is required for first_deposit/repeat_deposit")
+        if self.action_type in AMOUNT_ACTION_TYPES and self.amount is None:
+            raise ValueError("amount is required for first_deposit/repeat_deposit/withdrawal")
         return self
 
 
@@ -102,8 +103,13 @@ class MyStatsOut(BaseModel):
     team_size: int | None
     previous_period_amount: Decimal
     change_percent: float | None
-    commission_rate: Decimal | None
-    commission_amount: Decimal | None
+    fd_amount: Decimal
+    rd_amount: Decimal
+    withdrawal_amount: Decimal
+    cashbox: Decimal  # fd_amount + rd_amount - withdrawal_amount
+    fd_commission_rate: Decimal
+    rd_commission_rate: Decimal
+    salary_amount: Decimal  # fd_amount*fd_rate/100 + rd_amount*rd_rate/100 — withdrawals don't claw back salary
 
 
 class UserOut(BaseModel):
@@ -113,7 +119,8 @@ class UserOut(BaseModel):
     role: Role
     team_id: uuid.UUID | None
     status: UserStatus
-    commission_rate: Decimal | None
+    fd_commission_rate: Decimal
+    rd_commission_rate: Decimal
 
     model_config = {"from_attributes": True}
 
@@ -133,8 +140,9 @@ class TeamAssignmentUpdate(BaseModel):
     team_id: uuid.UUID | None = None
 
 
-class CommissionRateUpdate(BaseModel):
-    commission_rate: Decimal = Field(ge=0, le=100)
+class SalaryRatesUpdate(BaseModel):
+    fd_commission_rate: Decimal = Field(ge=0, le=100)
+    rd_commission_rate: Decimal = Field(ge=0, le=100)
 
 
 class TeamCreate(BaseModel):
@@ -232,3 +240,23 @@ class GoalProgressOut(BaseModel):
     current_amount: Decimal
     percent: float
     behind_pace: bool
+
+
+class ApiKeyCreate(BaseModel):
+    name: str
+    user_id: uuid.UUID  # which user (and thus role/permissions) this key acts as
+
+
+class ApiKeyOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    key_prefix: str
+    is_active: bool
+    created_at: datetime
+    last_used_at: datetime | None
+
+    model_config = {"from_attributes": True}
+
+
+class ApiKeyCreated(ApiKeyOut):
+    key: str  # returned once, at creation — never retrievable again

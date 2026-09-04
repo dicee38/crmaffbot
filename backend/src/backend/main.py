@@ -7,7 +7,18 @@ from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from backend.api import actions, audit, change_requests, goals, platforms, reports, stats, users, webhooks
+from backend.api import (
+    actions,
+    api_keys,
+    audit,
+    change_requests,
+    goals,
+    platforms,
+    reports,
+    stats,
+    users,
+    webhooks,
+)
 from backend.config import settings
 from backend.scheduler import check_idle_managers, send_daily_digest, send_weekly_digest
 
@@ -46,6 +57,7 @@ app.include_router(reports.router)
 app.include_router(change_requests.router)
 app.include_router(audit.router)
 app.include_router(platforms.router)
+app.include_router(api_keys.router)
 
 app.mount(
     "/miniapp",

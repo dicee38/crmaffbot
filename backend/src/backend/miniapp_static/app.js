@@ -14,11 +14,13 @@ const ROLE_LABELS = {
 const STATUS_LABELS = { active: "Активен", blocked: "Заблокирован" };
 const REQUEST_STATUS_LABELS = { pending: "Ожидает", approved: "Подтверждено", rejected: "Отклонено" };
 const ACTION_LABELS = { create: "Создание", update: "Правка", delete: "Удаление" };
+const AMOUNT_ACTION_TYPES = ["first_deposit", "repeat_deposit", "withdrawal"];
 const ACTION_TYPE_LABELS = {
   registration: "Регистрация",
   first_deposit: "Первый депозит",
   repeat_deposit: "Повторный депозит",
   lead: "Лиды",
+  withdrawal: "Вывод",
 };
 
 const TABS = {
@@ -258,16 +260,38 @@ function actionRow(action, { canManage }) {
   </div>`;
 }
 
+let actionsPlayerFilter = "";
+
 async function loadActions() {
   const view = document.getElementById("view-actions");
   view.innerHTML = skeleton(4);
   try {
     const { period_start, period_end } = periodThisMonth();
-    const actionsList = await api("GET", "/actions", { params: { period_start, period_end, limit: 50 } });
+    const params = { period_start, period_end, limit: 50 };
+    if (actionsPlayerFilter) params.player_id = actionsPlayerFilter;
+    const actionsList = await api("GET", "/actions", { params });
     if (state.me.role !== "manager") await ensureUsers();
-    view.innerHTML = actionsList.length
-      ? `<div class="list">${actionsList.map((a) => actionRow(a, { canManage: true })).join("")}</div>`
-      : stateBlock("empty", "За этот месяц действий нет.");
+
+    const searchBar = `<div class="field search-bar">
+      <input id="actions-player-search" placeholder="Поиск по ID трейдера" value="${esc(actionsPlayerFilter)}" />
+      <button class="btn btn-secondary" id="actions-player-search-btn">Найти</button>
+      ${actionsPlayerFilter ? `<button class="btn btn-secondary" id="actions-player-search-clear">✕</button>` : ""}
+    </div>`;
+
+    view.innerHTML =
+      searchBar +
+      (actionsList.length
+        ? `<div class="list">${actionsList.map((a) => actionRow(a, { canManage: true })).join("")}</div>`
+        : stateBlock("empty", actionsPlayerFilter ? "Действий с этим ID не найдено." : "За этот месяц действий нет."));
+
+    document.getElementById("actions-player-search-btn").onclick = () => {
+      actionsPlayerFilter = document.getElementById("actions-player-search").value.trim();
+      loadActions();
+    };
+    document.getElementById("actions-player-search-clear")?.addEventListener("click", () => {
+      actionsPlayerFilter = "";
+      loadActions();
+    });
 
     view.querySelectorAll("[data-del]").forEach((btn) => {
       btn.onclick = () => confirmDeleteAction(btn.dataset.del);
@@ -349,8 +373,7 @@ function showAddActionSheet() {
   const amountField = document.getElementById("act-amount-field");
   const leadCountField = document.getElementById("act-leadcount-field");
   const syncFields = () => {
-    const isDeposit = typeSelect.value === "first_deposit" || typeSelect.value === "repeat_deposit";
-    amountField.hidden = !isDeposit;
+    amountField.hidden = !AMOUNT_ACTION_TYPES.includes(typeSelect.value);
     leadCountField.hidden = typeSelect.value !== "lead";
   };
   typeSelect.onchange = syncFields;
@@ -372,7 +395,7 @@ function showAddActionSheet() {
     const player_id = document.getElementById("act-player").value.trim() || null;
     const json = { action_type, player_id, currency: "USD" };
 
-    if (action_type === "first_deposit" || action_type === "repeat_deposit") {
+    if (AMOUNT_ACTION_TYPES.includes(action_type)) {
       const amount = document.getElementById("act-amount").value;
       if (!amount || Number(amount) <= 0) return toast("Введите сумму");
       json.amount = amount;
@@ -415,11 +438,15 @@ async function loadStats() {
       <div class="card stat-card"><div class="label">Сумма</div><div class="value">${money(stats.total_amount)}</div>${deltaKnown ? `<div class="delta ${deltaClass}">${deltaText}</div>` : ""}</div>
       <div class="card stat-card"><div class="label">Депозитов</div><div class="value">${stats.deposit_count}</div></div>
     </div>
-    <div class="card stat-card mt-4"><div class="label">Место в команде</div><div class="value">${stats.rank ? `${stats.rank} из ${stats.team_size}` : "нет команды"}</div></div>`;
-
-    if (stats.commission_rate !== null && stats.commission_rate !== undefined) {
-      html += `<div class="card stat-card mt-4"><div class="label">Комиссия (${stats.commission_rate}%)</div><div class="value">${money(stats.commission_amount)}</div></div>`;
-    }
+    <div class="card stat-card mt-4"><div class="label">Место в команде</div><div class="value">${stats.rank ? `${stats.rank} из ${stats.team_size}` : "нет команды"}</div></div>
+    <h2 class="section-title">Касса и зарплата</h2>
+    <div class="stat-grid">
+      <div class="card stat-card"><div class="label">FD</div><div class="value">${money(stats.fd_amount)}</div></div>
+      <div class="card stat-card"><div class="label">RD</div><div class="value">${money(stats.rd_amount)}</div></div>
+      <div class="card stat-card"><div class="label">Вывод</div><div class="value">${money(stats.withdrawal_amount)}</div></div>
+      <div class="card stat-card"><div class="label">Касса</div><div class="value">${money(stats.cashbox)}</div></div>
+    </div>
+    <div class="card stat-card mt-4"><div class="label">Зарплата (FD ${stats.fd_commission_rate}% + RD ${stats.rd_commission_rate}%)</div><div class="value">${money(stats.salary_amount)}</div></div>`;
 
     html += `<h2 class="section-title">План на месяц</h2><div id="stats-goal">${skeleton(2)}</div>`;
     view.innerHTML = html;
@@ -596,7 +623,7 @@ async function loadPeople() {
       .map((u) => {
         const team = teamName(u.team_id);
         const statusBadge = `<span class="badge ${u.status}">${STATUS_LABELS[u.status]}</span>`;
-        const commission = u.role === "manager" && u.commission_rate !== null ? ` · комиссия ${u.commission_rate}%` : "";
+        const commission = u.role === "manager" ? ` · FD ${u.fd_commission_rate}% / RD ${u.rd_commission_rate}%` : "";
         return `<div class="list-item">
           <div class="main">
             <div class="title">${esc(u.full_name)} <span class="badge role">${ROLE_LABELS[u.role]}</span></div>
@@ -674,7 +701,8 @@ function showManageUserSheet(user) {
         .map((t) => `<option value="${t.id}" ${t.id === user.team_id ? "selected" : ""}>${esc(t.name)}</option>`)
         .join("")}</select>
     </div>
-    ${user.role === "manager" ? `<div class="field"><label>Комиссия, %</label><input id="mu-commission" type="number" inputmode="decimal" value="${user.commission_rate ?? ""}" placeholder="0" /></div>` : ""}
+    ${user.role === "manager" ? `<div class="field"><label>Ставка FD, %</label><input id="mu-fd-rate" type="number" inputmode="decimal" value="${user.fd_commission_rate}" placeholder="10" /></div>
+    <div class="field"><label>Ставка RD, %</label><input id="mu-rd-rate" type="number" inputmode="decimal" value="${user.rd_commission_rate}" placeholder="7" /></div>` : ""}
     <button class="btn btn-primary btn-block" id="mu-save">Сохранить</button>
     <button class="btn ${isBlocked ? "btn-secondary" : "btn-danger"} btn-block mt-4" id="mu-toggle-block">${isBlocked ? "Разблокировать" : "Заблокировать"}</button>
   `);
@@ -685,10 +713,12 @@ function showManageUserSheet(user) {
       const team_id = document.getElementById("mu-team").value || null;
       if (role !== user.role) await api("PATCH", `/users/${user.id}/role`, { json: { role } });
       if (team_id !== user.team_id) await api("PATCH", `/users/${user.id}/team`, { json: { team_id } });
-      const commissionInput = document.getElementById("mu-commission");
-      if (commissionInput && role === "manager") {
-        const rate = commissionInput.value === "" ? 0 : Number(commissionInput.value);
-        await api("POST", `/users/${user.id}/commission-rate`, { json: { commission_rate: rate } });
+      const fdRateInput = document.getElementById("mu-fd-rate");
+      const rdRateInput = document.getElementById("mu-rd-rate");
+      if (fdRateInput && rdRateInput && role === "manager") {
+        const fd_commission_rate = fdRateInput.value === "" ? 0 : Number(fdRateInput.value);
+        const rd_commission_rate = rdRateInput.value === "" ? 0 : Number(rdRateInput.value);
+        await api("POST", `/users/${user.id}/salary-rates`, { json: { fd_commission_rate, rd_commission_rate } });
       }
       closeSheet();
       toast("Сохранено");

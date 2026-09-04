@@ -49,8 +49,10 @@ class User(Base):
     status: Mapped[UserStatus] = mapped_column(
         _pg_enum(UserStatus, "user_status"), default=UserStatus.ACTIVE
     )
-    # Percent, e.g. 5.00 = 5%. Null = no commission configured for this manager (§8 stage 4).
-    commission_rate: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    # Percent, e.g. 10.00 = 10%. Only meaningful for role = manager; salary for a period is
+    # fd_commission_rate% of their FD total + rd_commission_rate% of their RD total.
+    fd_commission_rate: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=Decimal("10.00"))
+    rd_commission_rate: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=Decimal("7.00"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -193,3 +195,22 @@ class Goal(Base):
     period: Mapped[date] = mapped_column(Date)
     target_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+
+
+class ApiKey(Base):
+    """Токен для внешних интеграций (сайт, Chatterfy и т.п.) — запрос с заголовком
+    Authorization: Bearer <ключ> аутентифицируется как user_id (сервисная учётная
+    запись), без привязки к Telegram. Хранится только хэш ключа."""
+
+    __tablename__ = "api_keys"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"))
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    name: Mapped[str]
+    key_hash: Mapped[str] = mapped_column(unique=True, index=True)
+    key_prefix: Mapped[str]
+    is_active: Mapped[bool] = mapped_column(default=True)
+    created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

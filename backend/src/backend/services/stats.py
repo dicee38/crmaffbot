@@ -5,7 +5,7 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared.enums import DEPOSIT_ACTION_TYPES, ActionStatus, Role
+from shared.enums import DEPOSIT_ACTION_TYPES, ActionStatus, ActionType, Role
 from shared.models import MopAction, User
 from shared.schemas import MyStatsOut, TopEntry
 
@@ -18,6 +18,27 @@ def _deposit_conditions(period_start: date, period_end: date):
         MopAction.created_at >= period_start,
         MopAction.created_at < period_end + timedelta(days=1),
     )
+
+
+def _type_conditions(period_start: date, period_end: date, action_type: ActionType):
+    return (
+        MopAction.action_type == action_type,
+        MopAction.status == ActionStatus.CONFIRMED,
+        MopAction.deleted_at.is_(None),
+        MopAction.created_at >= period_start,
+        MopAction.created_at < period_end + timedelta(days=1),
+    )
+
+
+async def _sum_for_type(
+    db: AsyncSession, mop_id: uuid.UUID, start: date, end: date, action_type: ActionType
+) -> Decimal:
+    result = await db.execute(
+        select(func.coalesce(func.sum(MopAction.amount), 0)).where(
+            MopAction.mop_id == mop_id, *_type_conditions(start, end, action_type)
+        )
+    )
+    return Decimal(result.scalar_one())
 
 
 async def get_top(
@@ -100,9 +121,13 @@ async def get_manager_stats(
 
     rank, team_size = await _rank_in_team(db, user, period_start, period_end)
 
-    commission_amount = None
-    if user.commission_rate is not None:
-        commission_amount = current_amount * user.commission_rate / 100
+    fd_amount = await _sum_for_type(db, user.id, period_start, period_end, ActionType.FIRST_DEPOSIT)
+    rd_amount = await _sum_for_type(db, user.id, period_start, period_end, ActionType.REPEAT_DEPOSIT)
+    withdrawal_amount = await _sum_for_type(db, user.id, period_start, period_end, ActionType.WITHDRAWAL)
+    cashbox = fd_amount + rd_amount - withdrawal_amount
+    salary_amount = (
+        fd_amount * user.fd_commission_rate / 100 + rd_amount * user.rd_commission_rate / 100
+    )
 
     return MyStatsOut(
         total_amount=current_amount,
@@ -111,6 +136,11 @@ async def get_manager_stats(
         team_size=team_size,
         previous_period_amount=previous_amount,
         change_percent=change_percent,
-        commission_rate=user.commission_rate,
-        commission_amount=commission_amount,
+        fd_amount=fd_amount,
+        rd_amount=rd_amount,
+        withdrawal_amount=withdrawal_amount,
+        cashbox=cashbox,
+        fd_commission_rate=user.fd_commission_rate,
+        rd_commission_rate=user.rd_commission_rate,
+        salary_amount=salary_amount,
     )

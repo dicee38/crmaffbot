@@ -298,6 +298,9 @@ h2.section-title:first-child { margin-top: 0; }
   font-family: inherit;
 }
 .field input:focus, .field select:focus { outline: 2px solid var(--accent); }
+.search-bar { display: flex; gap: 8px; align-items: center; }
+.search-bar input { flex: 1; margin: 0; }
+.search-bar .btn { padding: 11px 14px; white-space: nowrap; }
 .segmented {
   display: flex;
   background: var(--bg-secondary);

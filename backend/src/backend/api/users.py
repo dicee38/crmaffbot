@@ -9,8 +9,8 @@ from backend.permissions import require_role
 from shared.enums import Role, UserStatus
 from shared.models import Team, User
 from shared.schemas import (
-    CommissionRateUpdate,
     RoleUpdate,
+    SalaryRatesUpdate,
     TeamAssignmentUpdate,
     TeamCreate,
     TeamOut,
@@ -124,8 +124,6 @@ async def set_role(
             team.teamlead_id = None
 
     user.role = payload.role
-    if payload.role != Role.MANAGER:
-        user.commission_rate = None
 
     await db.commit()
     await db.refresh(user)
@@ -150,17 +148,18 @@ async def set_team(
     return user
 
 
-@router.post("/{user_id}/commission-rate", response_model=UserOut)
-async def set_commission_rate(
+@router.post("/{user_id}/salary-rates", response_model=UserOut)
+async def set_salary_rates(
     user_id: uuid.UUID,
-    payload: CommissionRateUpdate,
+    payload: SalaryRatesUpdate,
     admin: User = Depends(require_role(Role.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> User:
     user = await _get_user_in_org_or_404(db, admin, user_id)
     if user.role != Role.MANAGER:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Commission only applies to managers")
-    user.commission_rate = payload.commission_rate
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Salary rates only apply to managers")
+    user.fd_commission_rate = payload.fd_commission_rate
+    user.rd_commission_rate = payload.rd_commission_rate
     await db.commit()
     await db.refresh(user)
     return user

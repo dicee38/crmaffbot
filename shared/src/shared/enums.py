@@ -19,10 +19,13 @@ class ActionType(str, enum.Enum):
     FIRST_DEPOSIT = "first_deposit"
     REPEAT_DEPOSIT = "repeat_deposit"
     LEAD = "lead"
+    WITHDRAWAL = "withdrawal"
 
 
-# Deposit-equivalent action types — what v0.1's rating/goals/commission logic counted.
+# Deposit-equivalent action types — what v0.1's rating/goals/salary logic counted.
 DEPOSIT_ACTION_TYPES = (ActionType.FIRST_DEPOSIT, ActionType.REPEAT_DEPOSIT)
+# Action types that require an amount, like a deposit does.
+AMOUNT_ACTION_TYPES = (ActionType.FIRST_DEPOSIT, ActionType.REPEAT_DEPOSIT, ActionType.WITHDRAWAL)
 
 
 class ActionSource(str, enum.Enum):

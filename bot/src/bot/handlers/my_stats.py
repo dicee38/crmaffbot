@@ -30,8 +30,9 @@ async def my_stats(message: Message, current_user: dict) -> None:
     text = (
         f"Депозитов за месяц: {stats['deposit_count']}\n"
         f"Сумма: {stats['total_amount']}\n"
-        f"Место в команде: {rank_text}"
+        f"Место в команде: {rank_text}\n"
+        f"FD: {stats['fd_amount']} · RD: {stats['rd_amount']} · Вывод: {stats['withdrawal_amount']}\n"
+        f"Касса: {stats['cashbox']}\n"
+        f"Зарплата (FD {stats['fd_commission_rate']}% + RD {stats['rd_commission_rate']}%): {stats['salary_amount']}"
     )
-    if stats["commission_rate"] is not None:
-        text += f"\nКомиссия ({stats['commission_rate']}%): {stats['commission_amount']}"
     await message.answer(text)

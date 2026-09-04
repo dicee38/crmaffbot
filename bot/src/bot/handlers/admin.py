@@ -149,15 +149,16 @@ async def set_commission(message: Message, command: CommandObject, current_user:
         await message.answer("Только для администратора.")
         return
 
-    usage = "Использование: /set_commission <telegram_id> <ставка в %>"
+    usage = "Использование: /set_commission <telegram_id> <ставка FD в %> <ставка RD в %>"
     parts = command.args.split() if command.args else []
-    if len(parts) != 2 or not parts[0].isdigit():
+    if len(parts) != 3 or not parts[0].isdigit():
         await message.answer(usage)
         return
 
     telegram_id = int(parts[0])
     try:
-        rate = float(parts[1].replace(",", "."))
+        fd_rate = float(parts[1].replace(",", "."))
+        rd_rate = float(parts[2].replace(",", "."))
     except ValueError:
         await message.answer(usage)
         return
@@ -171,12 +172,12 @@ async def set_commission(message: Message, command: CommandObject, current_user:
             return
 
         response = await client.post(
-            f"/users/{target['id']}/commission-rate",
+            f"/users/{target['id']}/salary-rates",
             headers=headers,
-            json={"commission_rate": rate},
+            json={"fd_commission_rate": fd_rate, "rd_commission_rate": rd_rate},
         )
 
     if response.status_code == 200:
-        await message.answer(f"Комиссия {target['full_name']}: {rate}%.")
+        await message.answer(f"Ставки {target['full_name']}: FD {fd_rate}% / RD {rd_rate}%.")
     else:
         await message.answer(f"Ошибка: {response.text}")
