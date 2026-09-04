@@ -8,7 +8,16 @@ from backend.deps import get_current_user, get_db
 from backend.permissions import require_role
 from shared.enums import Role, UserStatus
 from shared.models import Team, User
-from shared.schemas import CommissionRateUpdate, TeamCreate, TeamOut, TeamUpdate, UserCreate, UserOut
+from shared.schemas import (
+    CommissionRateUpdate,
+    RoleUpdate,
+    TeamAssignmentUpdate,
+    TeamCreate,
+    TeamOut,
+    TeamUpdate,
+    UserCreate,
+    UserOut,
+)
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -79,6 +88,63 @@ async def unblock_user(
 ) -> User:
     user = await _get_user_in_org_or_404(db, admin, user_id)
     user.status = UserStatus.ACTIVE
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+@router.get("/by-telegram-id/{telegram_id}", response_model=UserOut)
+async def get_user_by_telegram_id(
+    telegram_id: int,
+    admin: User = Depends(require_role(Role.ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    result = await db.execute(
+        select(User).where(User.telegram_id == telegram_id, User.org_id == admin.org_id)
+    )
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+    return user
+
+
+@router.patch("/{user_id}/role", response_model=UserOut)
+async def set_role(
+    user_id: uuid.UUID,
+    payload: RoleUpdate,
+    admin: User = Depends(require_role(Role.ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    user = await _get_user_in_org_or_404(db, admin, user_id)
+
+    if user.role == Role.TEAMLEAD and payload.role != Role.TEAMLEAD:
+        # Otherwise the team would keep pointing at someone who's no longer a teamlead.
+        teams_led = await db.execute(select(Team).where(Team.teamlead_id == user.id))
+        for team in teams_led.scalars().all():
+            team.teamlead_id = None
+
+    user.role = payload.role
+    if payload.role != Role.MANAGER:
+        user.commission_rate = None
+
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+@router.patch("/{user_id}/team", response_model=UserOut)
+async def set_team(
+    user_id: uuid.UUID,
+    payload: TeamAssignmentUpdate,
+    admin: User = Depends(require_role(Role.ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    user = await _get_user_in_org_or_404(db, admin, user_id)
+    if payload.team_id is not None:
+        team = await db.get(Team, payload.team_id)
+        if team is None or team.org_id != admin.org_id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Team not found")
+    user.team_id = payload.team_id
     await db.commit()
     await db.refresh(user)
     return user

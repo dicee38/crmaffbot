@@ -110,6 +110,14 @@ class UserCreate(BaseModel):
     team_id: uuid.UUID | None = None
 
 
+class RoleUpdate(BaseModel):
+    role: Role
+
+
+class TeamAssignmentUpdate(BaseModel):
+    team_id: uuid.UUID | None = None
+
+
 class CommissionRateUpdate(BaseModel):
     commission_rate: Decimal = Field(ge=0, le=100)
 
