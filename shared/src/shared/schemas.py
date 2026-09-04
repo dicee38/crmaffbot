@@ -1,10 +1,10 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, Field
 
-from shared.enums import DepositSource, DepositStatus, Role, UserStatus
+from shared.enums import DepositSource, DepositStatus, GoalScope, Role, UserStatus
 
 
 class DepositCreate(BaseModel):
@@ -74,6 +74,10 @@ class TeamCreate(BaseModel):
     teamlead_id: uuid.UUID | None = None
 
 
+class TeamUpdate(BaseModel):
+    teamlead_id: uuid.UUID | None = None
+
+
 class TeamOut(BaseModel):
     id: uuid.UUID
     org_id: uuid.UUID
@@ -81,3 +85,29 @@ class TeamOut(BaseModel):
     teamlead_id: uuid.UUID | None
 
     model_config = {"from_attributes": True}
+
+
+class GoalCreate(BaseModel):
+    scope: GoalScope
+    scope_id: uuid.UUID
+    period: date  # any day in the target month — normalized to that month's 1st
+    target_amount: Decimal = Field(gt=0)
+
+
+class GoalOut(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    scope: GoalScope
+    scope_id: uuid.UUID
+    period: date
+    target_amount: Decimal
+    created_by: uuid.UUID
+
+    model_config = {"from_attributes": True}
+
+
+class GoalProgressOut(BaseModel):
+    goal: GoalOut
+    current_amount: Decimal
+    percent: float
+    behind_pace: bool

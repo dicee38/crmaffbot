@@ -8,7 +8,7 @@ from backend.deps import get_current_user, get_db
 from backend.permissions import require_role
 from shared.enums import Role, UserStatus
 from shared.models import Team, User
-from shared.schemas import TeamCreate, TeamOut, UserCreate, UserOut
+from shared.schemas import TeamCreate, TeamOut, TeamUpdate, UserCreate, UserOut
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -101,6 +101,28 @@ async def create_team(
 ) -> Team:
     team = Team(org_id=admin.org_id, name=payload.name, teamlead_id=payload.teamlead_id)
     db.add(team)
+    await db.commit()
+    await db.refresh(team)
+    return team
+
+
+@router.patch("/teams/{team_id}", response_model=TeamOut)
+async def update_team(
+    team_id: uuid.UUID,
+    payload: TeamUpdate,
+    admin: User = Depends(require_role(Role.ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> Team:
+    team = await db.get(Team, team_id)
+    if team is None or team.org_id != admin.org_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Team not found")
+
+    if payload.teamlead_id is not None:
+        teamlead = await _get_user_in_org_or_404(db, admin, payload.teamlead_id)
+        if teamlead.role != Role.TEAMLEAD:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "User is not a teamlead")
+
+    team.teamlead_id = payload.teamlead_id
     await db.commit()
     await db.refresh(team)
     return team

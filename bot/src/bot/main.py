@@ -8,7 +8,7 @@ from aiogram.filters import CommandStart
 from aiogram.types import Message
 
 from bot.config import settings
-from bot.handlers import admin, deposit_entry, my_stats, team_top
+from bot.handlers import admin, deposit_entry, goals, my_stats, reports, team_top
 from bot.keyboards.role_menus import menu_for_role
 from bot.middlewares.auth import AuthMiddleware
 
@@ -31,6 +31,8 @@ async def main() -> None:
     dp.include_router(deposit_entry.router)
     dp.include_router(my_stats.router)
     dp.include_router(team_top.router)
+    dp.include_router(goals.router)
+    dp.include_router(reports.router)
     dp.include_router(admin.router)
 
     await dp.start_polling(bot)

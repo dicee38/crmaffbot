@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.deps import get_db
 from backend.permissions import require_role
 from backend.services import deposits as deposit_service
+from backend.services import notifications
 from shared.enums import Role
 from shared.models import Deposit, User
 from shared.schemas import DepositCreate, DepositOut, DepositUpdate
@@ -44,6 +45,7 @@ async def create_deposit(
         currency=payload.currency,
         created_by=user.id,
     )
+    await notifications.notify_deposit_created(db, deposit, created_by=user)
     return _to_out(deposit)
 
 
